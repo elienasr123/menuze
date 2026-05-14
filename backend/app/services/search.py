@@ -1,13 +1,14 @@
 from sqlalchemy.orm import Session
 from sqlalchemy import text
+from typing import Optional
 
 
 def search_dishes(
     db: Session,
     query: str,
     limit: int = 50,
-    lat: float | None = None,
-    lon: float | None = None,
+    lat: Optional[float] = None,
+    lon: Optional[float] = None,
 ) -> list[dict]:
 
     if lat is not None and lon is not None:
