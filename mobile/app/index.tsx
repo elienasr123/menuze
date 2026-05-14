@@ -15,7 +15,7 @@ export default function HomeScreen() {
   const [userLon, setUserLon] = useState<number | undefined>();
   const [selectedDish, setSelectedDish] = useState<Dish | null>(null);
 
-  // Request location on mount
+  // Silently try to get location — works if allowed, skipped if denied
   useEffect(() => {
     if (typeof navigator !== "undefined" && navigator.geolocation) {
       navigator.geolocation.getCurrentPosition(
@@ -23,9 +23,7 @@ export default function HomeScreen() {
           setUserLat(pos.coords.latitude);
           setUserLon(pos.coords.longitude);
         },
-        () => {
-          // Location denied — search still works, just no distance filter
-        }
+        () => {}
       );
     }
   }, []);
@@ -44,30 +42,30 @@ export default function HomeScreen() {
     }
   }, [query, userLat, userLon]);
 
+  const openUrl = (url: string) => {
+    if (typeof window !== "undefined") {
+      window.location.href = url;
+    } else {
+      Linking.openURL(url);
+    }
+  };
+
   const openDirections = (dish: Dish) => {
     if (!dish.restaurant_lat || !dish.restaurant_lon) return;
-    const lat = dish.restaurant_lat;
-    const lon = dish.restaurant_lon;
-    const label = encodeURIComponent(dish.restaurant_name);
-    const url = Platform.OS === "ios"
-      ? `maps://?q=${label}&ll=${lat},${lon}`
-      : `geo:${lat},${lon}?q=${label}`;
-    Linking.openURL(url).catch(() =>
-      Linking.openURL(`https://maps.google.com/?q=${lat},${lon}`)
-    );
+    const name = encodeURIComponent(dish.restaurant_name + " Lebanon");
+    openUrl(`https://maps.google.com/maps/search/${name}/@${dish.restaurant_lat},${dish.restaurant_lon},17z`);
   };
 
   const openGoogleSearch = (dish: Dish) => {
     const q = encodeURIComponent(`${dish.restaurant_name} Lebanon`);
-    Linking.openURL(`https://www.google.com/search?q=${q}`);
+    openUrl(`https://www.google.com/search?q=${q}`);
   };
 
   return (
     <SafeAreaView style={styles.container}>
       <Text style={styles.logo}>menuze</Text>
       <Text style={styles.tagline}>
-        Compare dish prices across Beirut
-        {userLat ? " 📍" : ""}
+        {userLat ? "📍 Sorted by distance from you" : "Compare dish prices across Beirut"}
       </Text>
 
       <View style={styles.searchRow}>
@@ -225,6 +223,7 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: "#fff", paddingHorizontal: 16 },
   logo: { fontSize: 32, fontWeight: "800", color: "#FF4D00", marginTop: 24, textAlign: "center" },
   tagline: { fontSize: 13, color: "#888", textAlign: "center", marginBottom: 20 },
+  taglineLocation: { fontSize: 13, color: "#FF4D00", textAlign: "center", marginBottom: 20, textDecorationLine: "underline" },
   searchRow: { flexDirection: "row", gap: 8, marginBottom: 16 },
   input: {
     flex: 1, borderWidth: 1.5, borderColor: "#E0E0E0", borderRadius: 12,

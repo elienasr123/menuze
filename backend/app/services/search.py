@@ -8,41 +8,27 @@ def search_dishes(
     limit: int = 50,
     lat: float | None = None,
     lon: float | None = None,
-    radius_km: float = 5.0,
 ) -> list[dict]:
 
-    # Build location filter if coordinates provided
     if lat is not None and lon is not None:
-        location_filter = """
-            AND (
-                r.lat IS NULL OR r.lon IS NULL OR
-                (6371 * acos(
-                    cos(radians(:lat)) * cos(radians(r.lat::float)) *
-                    cos(radians(r.lon::float) - radians(:lon)) +
-                    sin(radians(:lat)) * sin(radians(r.lat::float))
-                )) <= :radius_km
-            )
-        """
         distance_col = """
-            CASE WHEN r.lat IS NOT NULL AND r.lon IS NOT NULL THEN
-                ROUND((6371 * acos(
-                    cos(radians(:lat)) * cos(radians(r.lat::float)) *
-                    cos(radians(r.lon::float) - radians(:lon)) +
-                    sin(radians(:lat)) * sin(radians(r.lat::float))
-                ))::numeric, 2)
-            END AS distance_km,
+            ROUND((6371 * acos(
+                LEAST(1.0, cos(radians(:lat)) * cos(radians(r.lat::float)) *
+                cos(radians(r.lon::float) - radians(:lon)) +
+                sin(radians(:lat)) * sin(radians(r.lat::float)))
+            ))::numeric, 1) AS distance_km,
         """
+        order_by = "ORDER BY distance_km ASC NULLS LAST, rank DESC, d.name"
         params = {
             "query": query,
             "like_query": f"%{query}%",
             "limit": limit,
             "lat": lat,
             "lon": lon,
-            "radius_km": radius_km,
         }
     else:
-        location_filter = ""
         distance_col = "NULL AS distance_km,"
+        order_by = "ORDER BY rank DESC, d.name"
         params = {
             "query": query,
             "like_query": f"%{query}%",
@@ -69,12 +55,10 @@ def search_dishes(
             ts_rank(d.search_vector, plainto_tsquery('simple', :query)) AS rank
         FROM dishes d
         JOIN restaurants r ON r.id = d.restaurant_id
-        WHERE (
+        WHERE
             d.search_vector @@ plainto_tsquery('simple', :query)
             OR d.name ILIKE :like_query
-        )
-        {location_filter}
-        ORDER BY rank DESC, d.name
+        {order_by}
         LIMIT :limit
     """), params).mappings().all()
 
