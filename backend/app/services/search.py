@@ -63,4 +63,13 @@ def search_dishes(
         LIMIT :limit
     """), params).mappings().all()
 
-    return [dict(row) for row in rows]
+    results = []
+    for row in rows:
+        r = dict(row)
+        # Convert Decimal to float for JSON serialization
+        for key in ("restaurant_lat", "restaurant_lon", "distance_km",
+                    "price_lbp", "price_usd", "rank"):
+            if r.get(key) is not None:
+                r[key] = float(r[key])
+        results.append(r)
+    return results
