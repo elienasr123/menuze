@@ -9,6 +9,7 @@ def search_dishes(
     limit: int = 50,
     lat: Optional[float] = None,
     lon: Optional[float] = None,
+    cuisine: Optional[str] = None,
 ) -> list[dict]:
 
     if lat is not None and lon is not None:
@@ -20,7 +21,7 @@ def search_dishes(
             ))::numeric, 1) AS distance_km,
         """
         order_by = "ORDER BY distance_km ASC NULLS LAST, rank DESC, d.name"
-        params = {
+        params: dict = {
             "query": query,
             "like_query": f"%{query}%",
             "limit": limit,
@@ -35,6 +36,23 @@ def search_dishes(
             "like_query": f"%{query}%",
             "limit": limit,
         }
+
+    # Cuisine filter
+    cuisine_filter = ""
+    if cuisine:
+        cuisine_filter = "AND r.cuisine ILIKE :cuisine"
+        params["cuisine"] = f"%{cuisine}%"
+
+    # If browsing by cuisine only (empty query), show all dishes for that cuisine
+    if cuisine and not query.strip():
+        where_clause = "WHERE 1=1"
+        params["query"] = cuisine
+        params["like_query"] = f"%{cuisine}%"
+        distance_col_fixed = distance_col.replace(
+            "LEAST(1.0,", "LEAST(1.0,"
+        )
+    else:
+        where_clause = "WHERE (d.search_vector @@ plainto_tsquery('simple', :query) OR d.name ILIKE :like_query)"
 
     rows = db.execute(text(f"""
         SELECT
@@ -56,9 +74,8 @@ def search_dishes(
             ts_rank(d.search_vector, plainto_tsquery('simple', :query)) AS rank
         FROM dishes d
         JOIN restaurants r ON r.id = d.restaurant_id
-        WHERE
-            d.search_vector @@ plainto_tsquery('simple', :query)
-            OR d.name ILIKE :like_query
+        {where_clause}
+        {cuisine_filter}
         {order_by}
         LIMIT :limit
     """), params).mappings().all()
@@ -66,7 +83,6 @@ def search_dishes(
     results = []
     for row in rows:
         r = dict(row)
-        # Convert Decimal to float for JSON serialization
         for key in ("restaurant_lat", "restaurant_lon", "distance_km",
                     "price_lbp", "price_usd", "rank"):
             if r.get(key) is not None:

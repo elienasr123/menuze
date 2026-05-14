@@ -25,13 +25,16 @@ export interface Dish {
 export async function searchDishes(
   query: string,
   lat?: number,
-  lon?: number
+  lon?: number,
+  cuisine?: string
 ): Promise<Dish[]> {
   const params: Record<string, string | number> = { q: query };
   if (lat !== undefined && lon !== undefined) {
     params.lat = lat;
     params.lon = lon;
-    params.radius_km = 10;
+  }
+  if (cuisine) {
+    params.cuisine = cuisine;
   }
   const { data } = await api.get("/search", { params });
   return data.results;

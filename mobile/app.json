@@ -21,6 +21,9 @@
       },
       "package": "com.menuze.app"
     },
-    "plugins": ["expo-router"]
+    "plugins": ["expo-router"],
+    "experiments": {
+      "baseUrl": "/menuze"
+    }
   }
 }
