@@ -17,9 +17,22 @@ export interface Dish {
   restaurant_name: string;
   logo_url: string;
   cuisine: string;
+  restaurant_lat: number | null;
+  restaurant_lon: number | null;
+  distance_km: number | null;
 }
 
-export async function searchDishes(query: string): Promise<Dish[]> {
-  const { data } = await api.get("/search", { params: { q: query } });
+export async function searchDishes(
+  query: string,
+  lat?: number,
+  lon?: number
+): Promise<Dish[]> {
+  const params: Record<string, string | number> = { q: query };
+  if (lat !== undefined && lon !== undefined) {
+    params.lat = lat;
+    params.lon = lon;
+    params.radius_km = 10;
+  }
+  const { data } = await api.get("/search", { params });
   return data.results;
 }
