@@ -1,8 +1,6 @@
 import axios from "axios";
 
-const BASE_URL = __DEV__
-  ? "http://localhost:8000"
-  : "https://api.menuze.app";
+const BASE_URL = "https://menuze-production.up.railway.app";
 
 const api = axios.create({ baseURL: BASE_URL });
 
