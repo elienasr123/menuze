@@ -1,0 +1,8 @@
+playwright==1.44.0
+asyncio
+httpx
+python-dotenv
+psycopg2-binary
+sqlalchemy
+openai
+tenacity

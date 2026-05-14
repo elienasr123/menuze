@@ -1,0 +1,26 @@
+{
+  "expo": {
+    "name": "Menuze",
+    "slug": "menuze",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "scheme": "menuze",
+    "userInterfaceStyle": "automatic",
+    "splash": {
+      "resizeMode": "contain",
+      "backgroundColor": "#FF4D00"
+    },
+    "ios": {
+      "supportsTablet": false,
+      "bundleIdentifier": "com.menuze.app"
+    },
+    "android": {
+      "adaptiveIcon": {
+        "backgroundColor": "#FF4D00"
+      },
+      "package": "com.menuze.app"
+    },
+    "plugins": ["expo-router"]
+  }
+}
