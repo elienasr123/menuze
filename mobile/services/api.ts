@@ -27,6 +27,21 @@ export interface Dish {
   distance_km: number | null;
 }
 
+export interface Restaurant {
+  id: string;
+  name: string;
+  logo_url: string;
+  cuisine: string;
+  lat: number | null;
+  lon: number | null;
+  dish_count: number;
+}
+
+export async function searchRestaurants(query: string): Promise<Restaurant[]> {
+  const { data } = await api.get("/restaurants/search", { params: { q: query } });
+  return data.results;
+}
+
 export async function searchDishes(
   query: string,
   lat?: number,

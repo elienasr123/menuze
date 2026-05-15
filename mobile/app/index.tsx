@@ -4,7 +4,7 @@ import {
   ActivityIndicator, TouchableOpacity, SafeAreaView,
   Modal, ScrollView, Platform, Linking,
 } from "react-native";
-import { searchDishes, Dish } from "../services/api";
+import { searchDishes, searchRestaurants, Dish, Restaurant } from "../services/api";
 
 const POPULAR = [
   { label: "🥙 Shawarma", q: "shawarma" },
@@ -45,6 +45,7 @@ export default function HomeScreen() {
   const [restaurantLoading, setRestaurantLoading] = useState(false);
   const [priceFilter, setPriceFilter] = useState<"all" | "under10" | "10to20" | "over20">("all");
   const [sort, setSort] = useState<string>("relevance");
+  const [restaurantResults, setRestaurantResults] = useState<Restaurant[]>([]);
   const [showA2HS, setShowA2HS] = useState(false);
   const [recentSearches, setRecentSearches] = useState<string[]>([]);
 
@@ -88,8 +89,12 @@ export default function HomeScreen() {
     if (q.trim()) saveRecent(q.trim());
     const activeSort = sortOverride ?? sort;
     try {
-      const dishes = await searchDishes(q.trim(), userLat, userLon, cuisine, undefined, activeSort);
+      const [dishes, restaurants] = await Promise.all([
+        searchDishes(q.trim(), userLat, userLon, cuisine, undefined, activeSort),
+        q.trim() ? searchRestaurants(q.trim()) : Promise.resolve([]),
+      ]);
       setResults(dishes);
+      setRestaurantResults(restaurants);
     } catch (e) {
       console.error(e);
     } finally {
@@ -196,7 +201,7 @@ export default function HomeScreen() {
 
         {!loading && results.length > 0 && (
           <>
-            <TouchableOpacity style={styles.backBtn} onPress={() => { setSearched(false); setQuery(""); setResults([]); setPriceFilter("all"); setSort("relevance"); }}>
+            <TouchableOpacity style={styles.backBtn} onPress={() => { setSearched(false); setQuery(""); setResults([]); setRestaurantResults([]); setPriceFilter("all"); setSort("relevance"); }}>
               <Text style={styles.backBtnText}>← Back</Text>
             </TouchableOpacity>
             <View style={styles.resultsHeader}>
@@ -205,6 +210,38 @@ export default function HomeScreen() {
               </Text>
               {userLat ? <Text style={styles.resultsSorted}>📍 sorted by distance</Text> : null}
             </View>
+
+            {/* Restaurant matches */}
+            {restaurantResults.length > 0 && (
+              <>
+                <Text style={styles.sectionLabel}>Restaurants</Text>
+                {restaurantResults.map(r => (
+                  <TouchableOpacity
+                    key={r.id}
+                    style={styles.restaurantCard}
+                    onPress={() => openRestaurantPage(r.id, r.name, r.logo_url)}
+                    activeOpacity={0.85}
+                  >
+                    {r.logo_url ? (
+                      <Image source={{ uri: r.logo_url }} style={styles.restaurantCardLogo} />
+                    ) : (
+                      <View style={[styles.restaurantCardLogo, styles.restaurantCardLogoPlaceholder]}>
+                        <Text style={{ fontSize: 22 }}>🏠</Text>
+                      </View>
+                    )}
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.restaurantCardName}>{r.name}</Text>
+                      {r.cuisine ? <Text style={styles.restaurantCardCuisine}>{r.cuisine}</Text> : null}
+                    </View>
+                    <View style={styles.restaurantCardRight}>
+                      <Text style={styles.restaurantCardDishes}>{r.dish_count} dishes</Text>
+                      <Text style={styles.restaurantCardArrow}>›</Text>
+                    </View>
+                  </TouchableOpacity>
+                ))}
+                {results.length > 0 && <Text style={[styles.sectionLabel, { marginTop: 8 }]}>Dishes</Text>}
+              </>
+            )}
 
             {/* Sort bar */}
             <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.filterBar} contentContainerStyle={{ paddingHorizontal: 16, gap: 8 }}>
@@ -548,6 +585,22 @@ const styles = StyleSheet.create({
   filterChipActive: { backgroundColor: "#FF4D00", borderColor: "#FF4D00" },
   filterChipText: { fontSize: 13, color: "#555", fontWeight: "600" },
   filterChipTextActive: { color: "#fff" },
+
+  // Restaurant search card
+  restaurantCard: {
+    flexDirection: "row", alignItems: "center", backgroundColor: "#fff",
+    borderRadius: 16, marginHorizontal: 16, marginBottom: 8, padding: 12,
+    shadowColor: "#000", shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.07, shadowRadius: 8, elevation: 3,
+    borderWidth: 1.5, borderColor: "#FFD4C2",
+  },
+  restaurantCardLogo: { width: 48, height: 48, borderRadius: 10, marginRight: 12 },
+  restaurantCardLogoPlaceholder: { backgroundColor: "#FFF5F2", alignItems: "center", justifyContent: "center" },
+  restaurantCardName: { fontSize: 15, fontWeight: "800", color: "#111", marginBottom: 2 },
+  restaurantCardCuisine: { fontSize: 12, color: "#AAA" },
+  restaurantCardRight: { alignItems: "flex-end", gap: 2 },
+  restaurantCardDishes: { fontSize: 12, color: "#FF4D00", fontWeight: "700" },
+  restaurantCardArrow: { fontSize: 22, color: "#FF4D00", fontWeight: "300" },
 
   // Restaurant page
   restaurantPage: { flex: 1, backgroundColor: "#F8F8F6" },
