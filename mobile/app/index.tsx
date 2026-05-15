@@ -44,6 +44,7 @@ export default function HomeScreen() {
   const [restaurantDishes, setRestaurantDishes] = useState<Dish[]>([]);
   const [restaurantLoading, setRestaurantLoading] = useState(false);
   const [priceFilter, setPriceFilter] = useState<"all" | "under10" | "10to20" | "over20">("all");
+  const [sort, setSort] = useState<string>("relevance");
   const [showA2HS, setShowA2HS] = useState(false);
   const [recentSearches, setRecentSearches] = useState<string[]>([]);
 
@@ -80,22 +81,30 @@ export default function HomeScreen() {
     }
   }, []);
 
-  const doSearch = useCallback(async (q: string, cuisine?: string) => {
+  const doSearch = useCallback(async (q: string, cuisine?: string, sortOverride?: string) => {
     setQuery(q);
     setLoading(true);
     setSearched(true);
     if (q.trim()) saveRecent(q.trim());
+    const activeSort = sortOverride ?? sort;
     try {
-      const dishes = await searchDishes(q.trim(), userLat, userLon, cuisine);
+      const dishes = await searchDishes(q.trim(), userLat, userLon, cuisine, undefined, activeSort);
       setResults(dishes);
     } catch (e) {
       console.error(e);
     } finally {
       setLoading(false);
     }
-  }, [userLat, userLon, recentSearches]);
+  }, [userLat, userLon, recentSearches, sort]);
 
   const handleSearch = useCallback(() => doSearch(query), [query, doSearch]);
+
+  const changeSort = useCallback((newSort: string) => {
+    setSort(newSort);
+    if (searched && query.trim()) {
+      doSearch(query, undefined, newSort);
+    }
+  }, [searched, query, doSearch]);
 
   const openRestaurantPage = useCallback(async (id: string, name: string, logo: string) => {
     setRestaurantPage({ id, name, logo });
@@ -108,9 +117,11 @@ export default function HomeScreen() {
   }, []);
 
   const filteredResults = results.filter(d => {
-    if (priceFilter === "under10") return d.price_usd > 0 && d.price_usd < 10;
-    if (priceFilter === "10to20") return d.price_usd >= 10 && d.price_usd <= 20;
-    if (priceFilter === "over20") return d.price_usd > 20;
+    const usd = d.price_usd > 0 ? d.price_usd : d.price_lbp > 0 ? d.price_lbp / 89500 : null;
+    if (usd === null) return priceFilter === "all";
+    if (priceFilter === "under10") return usd < 10;
+    if (priceFilter === "10to20") return usd >= 10 && usd <= 20;
+    if (priceFilter === "over20") return usd > 20;
     return true;
   });
 
@@ -185,7 +196,7 @@ export default function HomeScreen() {
 
         {!loading && results.length > 0 && (
           <>
-            <TouchableOpacity style={styles.backBtn} onPress={() => { setSearched(false); setQuery(""); setResults([]); setPriceFilter("all"); }}>
+            <TouchableOpacity style={styles.backBtn} onPress={() => { setSearched(false); setQuery(""); setResults([]); setPriceFilter("all"); setSort("relevance"); }}>
               <Text style={styles.backBtnText}>← Back</Text>
             </TouchableOpacity>
             <View style={styles.resultsHeader}>
@@ -195,10 +206,24 @@ export default function HomeScreen() {
               {userLat ? <Text style={styles.resultsSorted}>📍 sorted by distance</Text> : null}
             </View>
 
-            {/* Price filter bar */}
+            {/* Sort bar */}
             <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.filterBar} contentContainerStyle={{ paddingHorizontal: 16, gap: 8 }}>
+              {([
+                ["relevance", "⭐ Relevant"],
+                ["price_asc", "💰 Cheapest"],
+                ["price_desc", "🏆 Priciest"],
+                ...(userLat ? [["distance", "📍 Nearest"] as const] : []),
+              ] as [string, string][]).map(([val, label]) => (
+                <TouchableOpacity key={val} style={[styles.filterChip, sort === val && styles.filterChipActive]} onPress={() => changeSort(val)}>
+                  <Text style={[styles.filterChipText, sort === val && styles.filterChipTextActive]}>{label}</Text>
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+
+            {/* Price filter bar */}
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={[styles.filterBar, { marginBottom: 4 }]} contentContainerStyle={{ paddingHorizontal: 16, gap: 8 }}>
               {([["all","All"],["under10","Under $10"],["10to20","$10–$20"],["over20","Over $20"]] as const).map(([val, label]) => (
-                <TouchableOpacity key={val} style={[styles.filterChip, priceFilter === val && styles.filterChipActive]} onPress={() => setPriceFilter(val)}>
+                <TouchableOpacity key={val} style={[styles.filterChipOutline, priceFilter === val && styles.filterChipActive]} onPress={() => setPriceFilter(val)}>
                   <Text style={[styles.filterChipText, priceFilter === val && styles.filterChipTextActive]}>{label}</Text>
                 </TouchableOpacity>
               ))}
@@ -302,12 +327,16 @@ export default function HomeScreen() {
                     <Text style={styles.sheetDesc}>{selectedDish.description}</Text>
                   ) : null}
                   <View style={styles.sheetPriceRow}>
-                    {selectedDish.price_usd > 0 && (
-                      <Text style={styles.sheetPriceUsd}>${selectedDish.price_usd.toFixed(2)}</Text>
-                    )}
-                    {selectedDish.price_lbp > 0 && (
-                      <Text style={styles.sheetPriceLbp}>{Math.round(selectedDish.price_lbp / 1000)}k LBP</Text>
-                    )}
+                    {selectedDish.price_usd > 0 ? (
+                      <>
+                        <Text style={styles.sheetPriceUsd}>${selectedDish.price_usd.toFixed(2)}</Text>
+                        {selectedDish.price_lbp > 0 && (
+                          <Text style={styles.sheetPriceLbp}>{Math.round(selectedDish.price_lbp / 1000)}k LBP</Text>
+                        )}
+                      </>
+                    ) : selectedDish.price_lbp > 0 ? (
+                      <Text style={styles.sheetPriceUsd}>{Math.round(selectedDish.price_lbp / 1000)}k LBP</Text>
+                    ) : null}
                   </View>
                   <View style={styles.sheetRestaurantRow}>
                     {selectedDish.logo_url ? (
@@ -344,12 +373,19 @@ export default function HomeScreen() {
 }
 
 function DishCard({ dish, onPress, onRestaurantPress, isBestPrice }: { dish: Dish; onPress: () => void; onRestaurantPress?: () => void; isBestPrice?: boolean }) {
+  const [shared, setShared] = useState(false);
+
   const shareOnWhatsApp = (e: any) => {
     e.stopPropagation();
     const price = dish.price_usd > 0 ? `$${dish.price_usd.toFixed(2)}` : `${Math.round(dish.price_lbp / 1000)}k LBP`;
     const text = encodeURIComponent(`🍽 ${dish.dish_name} at ${dish.restaurant_name} for ${price}\nFind more deals on menuze 👉 https://elienasr123.github.io/menuze/`);
     if (typeof window !== "undefined") window.location.href = `https://wa.me/?text=${text}`;
+    setShared(true);
+    setTimeout(() => setShared(false), 2000);
   };
+
+  const hasUsd = dish.price_usd > 0;
+  const hasLbp = dish.price_lbp > 0;
 
   return (
     <TouchableOpacity style={[styles.card, isBestPrice && styles.cardBest]} onPress={onPress} activeOpacity={0.85}>
@@ -381,14 +417,16 @@ function DishCard({ dish, onPress, onRestaurantPress, isBestPrice }: { dish: Dis
         )}
       </View>
       <View style={styles.priceBox}>
-        {dish.price_usd > 0 && (
-          <Text style={styles.price}>${dish.price_usd.toFixed(2)}</Text>
-        )}
-        {dish.price_lbp > 0 && (
-          <Text style={styles.priceLbp}>{Math.round(dish.price_lbp / 1000)}k LBP</Text>
-        )}
-        <TouchableOpacity onPress={shareOnWhatsApp} style={styles.shareBtn}>
-          <Text style={styles.shareBtnText}>↗</Text>
+        {hasUsd ? (
+          <>
+            <Text style={styles.price}>${dish.price_usd.toFixed(2)}</Text>
+            {hasLbp && <Text style={styles.priceLbp}>{Math.round(dish.price_lbp / 1000)}k LBP</Text>}
+          </>
+        ) : hasLbp ? (
+          <Text style={styles.priceLbpMain}>{Math.round(dish.price_lbp / 1000)}k{"\n"}LBP</Text>
+        ) : null}
+        <TouchableOpacity onPress={shareOnWhatsApp} style={[styles.shareBtn, shared && styles.shareBtnDone]}>
+          <Text style={styles.shareBtnText}>{shared ? "✓" : "↗"}</Text>
         </TouchableOpacity>
       </View>
     </TouchableOpacity>
@@ -498,12 +536,15 @@ const styles = StyleSheet.create({
   priceBox: { justifyContent: "center", alignItems: "flex-end", paddingHorizontal: 10, minWidth: 70 },
   price: { fontSize: 15, fontWeight: "800", color: "#FF4D00" },
   priceLbp: { fontSize: 10, color: "#AAA", marginTop: 2 },
+  priceLbpMain: { fontSize: 12, fontWeight: "800", color: "#FF4D00", textAlign: "right" },
   shareBtn: { marginTop: 8, backgroundColor: "#F0F0F0", borderRadius: 8, width: 28, height: 28, alignItems: "center", justifyContent: "center" },
+  shareBtnDone: { backgroundColor: "#D4EDDA" },
   shareBtnText: { fontSize: 14, color: "#555", fontWeight: "700" },
 
   // Filter bar
   filterBar: { marginBottom: 10 },
-  filterChip: { paddingHorizontal: 14, paddingVertical: 7, borderRadius: 20, backgroundColor: "#fff", borderWidth: 1, borderColor: "#E8E8E8" },
+  filterChip: { paddingHorizontal: 14, paddingVertical: 7, borderRadius: 20, backgroundColor: "#fff", borderWidth: 1.5, borderColor: "#FF4D00" },
+  filterChipOutline: { paddingHorizontal: 14, paddingVertical: 7, borderRadius: 20, backgroundColor: "#fff", borderWidth: 1, borderColor: "#E8E8E8" },
   filterChipActive: { backgroundColor: "#FF4D00", borderColor: "#FF4D00" },
   filterChipText: { fontSize: 13, color: "#555", fontWeight: "600" },
   filterChipTextActive: { color: "#fff" },

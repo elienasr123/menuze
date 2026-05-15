@@ -184,10 +184,12 @@ def normalize_items(items: list, category: str) -> list[dict]:
         result.append({
             "id": item.get("id"),
             "name": name,
+            "name_ar": item.get("ref_ar") or "",
             "price_lbp": price_lbp,
             "price_usd": price_usd,
             "currency": "LBP",
             "description": item.get("description") or item.get("desc") or "",
+            "description_ar": item.get("description_ar") or "",
             "image_url": item.get("image") or item.get("image_url") or (item.get("imgs") or [""])[0],
             "category": category,
         })

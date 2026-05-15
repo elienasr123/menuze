@@ -27,9 +27,10 @@ export async function searchDishes(
   lat?: number,
   lon?: number,
   cuisine?: string,
-  restaurantId?: string
+  restaurantId?: string,
+  sort: string = "relevance"
 ): Promise<Dish[]> {
-  const params: Record<string, string | number> = { q: query };
+  const params: Record<string, string | number> = { q: query, sort };
   if (lat !== undefined && lon !== undefined) {
     params.lat = lat;
     params.lon = lon;
