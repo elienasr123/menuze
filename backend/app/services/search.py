@@ -41,13 +41,28 @@ def search_dishes(
         distance_col = "NULL AS distance_km,"
         params = {"limit": limit}
 
+    # Price expression helper
+    price_expr = "CASE WHEN d.price_usd > 0 THEN d.price_usd ELSE d.price_lbp/89500.0 END"
+
+    # Distance expression helper (for use in ORDER BY)
+    if lat is not None and lon is not None:
+        dist_expr = """CASE WHEN r.lat IS NOT NULL AND r.lat != 0 AND r.lon IS NOT NULL AND r.lon != 0 THEN
+            6371 * acos(LEAST(1.0, cos(radians(:lat)) * cos(radians(r.lat::float)) *
+            cos(radians(r.lon::float) - radians(:lon)) + sin(radians(:lat)) * sin(radians(r.lat::float))))
+            ELSE 10 END"""
+    else:
+        dist_expr = "10"
+
     # Sort order
     if sort == "price_asc":
-        order_by = "ORDER BY CASE WHEN d.price_usd > 0 THEN d.price_usd ELSE d.price_lbp/89500.0 END ASC NULLS LAST"
+        order_by = f"ORDER BY {price_expr} ASC NULLS LAST"
     elif sort == "price_desc":
-        order_by = "ORDER BY CASE WHEN d.price_usd > 0 THEN d.price_usd ELSE d.price_lbp/89500.0 END DESC NULLS LAST"
+        order_by = f"ORDER BY {price_expr} DESC NULLS LAST"
     elif sort == "distance" and lat is not None:
         order_by = "ORDER BY distance_km ASC NULLS LAST, rank DESC"
+    elif sort == "value" and lat is not None:
+        # Best value = cheapest price + nearest location combined score
+        order_by = f"ORDER BY (COALESCE({price_expr}, 999) + ({dist_expr}) * 1.5) ASC NULLS LAST"
     else:
         if lat is not None and lon is not None:
             order_by = "ORDER BY distance_km ASC NULLS LAST, rank DESC, d.name"
