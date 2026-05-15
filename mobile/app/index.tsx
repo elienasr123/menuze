@@ -43,6 +43,7 @@ export default function HomeScreen() {
   const [restaurantPage, setRestaurantPage] = useState<{ id: string; name: string; logo: string } | null>(null);
   const [restaurantDishes, setRestaurantDishes] = useState<Dish[]>([]);
   const [restaurantLoading, setRestaurantLoading] = useState(false);
+  const [expandedCategories, setExpandedCategories] = useState<Set<string>>(new Set());
   const [priceFilter, setPriceFilter] = useState<"all" | "under10" | "10to20" | "over20">("all");
   const [sort, setSort] = useState<string>("relevance");
   const [restaurantResults, setRestaurantResults] = useState<Restaurant[]>([]);
@@ -114,9 +115,15 @@ export default function HomeScreen() {
   const openRestaurantPage = useCallback(async (id: string, name: string, logo: string) => {
     setRestaurantPage({ id, name, logo });
     setRestaurantLoading(true);
+    setExpandedCategories(new Set());
     try {
       const dishes = await searchDishes("", undefined, undefined, undefined, id);
       setRestaurantDishes(dishes);
+      // Auto-expand first category
+      if (dishes.length > 0) {
+        const firstCat = dishes[0].category || "Other";
+        setExpandedCategories(new Set([firstCat]));
+      }
     } catch (e) { console.error(e); }
     finally { setRestaurantLoading(false); }
   }, []);
@@ -325,25 +332,85 @@ export default function HomeScreen() {
       {/* Restaurant page modal */}
       <Modal visible={!!restaurantPage} animationType="slide" transparent onRequestClose={() => setRestaurantPage(null)}>
         <SafeAreaView style={styles.restaurantPage}>
+          {/* Header */}
           <View style={styles.restaurantPageHeader}>
             <TouchableOpacity onPress={() => setRestaurantPage(null)}>
               <Text style={styles.backBtnText}>← Back</Text>
             </TouchableOpacity>
             <View style={styles.restaurantPageTitle}>
-              {restaurantPage?.logo ? <Image source={{ uri: restaurantPage.logo }} style={styles.restaurantPageLogo} /> : null}
+              {restaurantPage?.logo ? (
+                <Image source={{ uri: restaurantPage.logo }} style={styles.restaurantPageLogo} />
+              ) : null}
               <Text style={styles.restaurantPageName} numberOfLines={1}>{restaurantPage?.name}</Text>
             </View>
           </View>
+
           {restaurantLoading ? (
-            <ActivityIndicator size="large" color="#FF4D00" style={{ marginTop: 40 }} />
-          ) : (
-            <ScrollView contentContainerStyle={{ padding: 16 }}>
-              <Text style={styles.sectionLabel}>{restaurantDishes.length} dishes</Text>
-              {restaurantDishes.map(dish => (
-                <DishCard key={dish.id} dish={dish} onPress={() => { setRestaurantPage(null); setSelectedDish(dish); }} />
-              ))}
-            </ScrollView>
-          )}
+            <ActivityIndicator size="large" color="#FF4D00" style={{ marginTop: 60 }} />
+          ) : (() => {
+            // Group dishes by category, preserving insertion order
+            const categoryMap: Record<string, Dish[]> = {};
+            for (const dish of restaurantDishes) {
+              const cat = dish.category?.trim() || "Other";
+              if (!categoryMap[cat]) categoryMap[cat] = [];
+              categoryMap[cat].push(dish);
+            }
+            const categories = Object.keys(categoryMap);
+
+            const toggleCategory = (cat: string) => {
+              setExpandedCategories(prev => {
+                const next = new Set(prev);
+                if (next.has(cat)) next.delete(cat);
+                else next.add(cat);
+                return next;
+              });
+            };
+
+            return (
+              <ScrollView contentContainerStyle={{ paddingBottom: 32 }}>
+                {/* Dish count summary */}
+                <View style={styles.menuSummary}>
+                  <Text style={styles.menuSummaryText}>
+                    {categories.length} categories · {restaurantDishes.length} dishes
+                  </Text>
+                </View>
+
+                {categories.map(cat => {
+                  const isOpen = expandedCategories.has(cat);
+                  const dishes = categoryMap[cat];
+                  return (
+                    <View key={cat} style={styles.categoryBlock}>
+                      {/* Category header — tap to expand/collapse */}
+                      <TouchableOpacity
+                        style={styles.categoryHeader}
+                        onPress={() => toggleCategory(cat)}
+                        activeOpacity={0.75}
+                      >
+                        <View style={styles.categoryHeaderLeft}>
+                          <Text style={styles.categoryName}>{cat}</Text>
+                          <Text style={styles.categoryCount}>{dishes.length} item{dishes.length !== 1 ? "s" : ""}</Text>
+                        </View>
+                        <Text style={[styles.categoryArrow, isOpen && styles.categoryArrowOpen]}>›</Text>
+                      </TouchableOpacity>
+
+                      {/* Dishes — shown when expanded */}
+                      {isOpen && (
+                        <View style={styles.categoryDishes}>
+                          {dishes.map(dish => (
+                            <RestaurantDishRow
+                              key={dish.id}
+                              dish={dish}
+                              onPress={() => setSelectedDish(dish)}
+                            />
+                          ))}
+                        </View>
+                      )}
+                    </View>
+                  );
+                })}
+              </ScrollView>
+            );
+          })()}
         </SafeAreaView>
       </Modal>
 
@@ -406,6 +473,43 @@ export default function HomeScreen() {
         </TouchableOpacity>
       </Modal>
     </SafeAreaView>
+  );
+}
+
+function RestaurantDishRow({ dish, onPress }: { dish: Dish; onPress: () => void }) {
+  const hasUsd = dish.price_usd > 0;
+  const hasLbp = dish.price_lbp >= 1000;
+
+  return (
+    <TouchableOpacity style={styles.menuRow} onPress={onPress} activeOpacity={0.8}>
+      {/* Dish info */}
+      <View style={styles.menuRowBody}>
+        <Text style={styles.menuRowName} numberOfLines={2}>{dish.dish_name}</Text>
+        {dish.description ? (
+          <Text style={styles.menuRowDesc} numberOfLines={2}>{dish.description}</Text>
+        ) : null}
+        <View style={styles.menuRowPriceRow}>
+          {hasUsd ? (
+            <>
+              <Text style={styles.menuRowPrice}>${dish.price_usd.toFixed(2)}</Text>
+              {hasLbp && (
+                <Text style={styles.menuRowPriceLbp}>{Math.round(dish.price_lbp / 1000)}k LBP</Text>
+              )}
+            </>
+          ) : hasLbp ? (
+            <Text style={styles.menuRowPrice}>{Math.round(dish.price_lbp / 1000)}k LBP</Text>
+          ) : null}
+        </View>
+      </View>
+      {/* Dish image */}
+      {dish.image_url ? (
+        <Image source={{ uri: dish.image_url }} style={styles.menuRowImage} />
+      ) : (
+        <View style={styles.menuRowImagePlaceholder}>
+          <Text style={{ fontSize: 22 }}>🍽</Text>
+        </View>
+      )}
+    </TouchableOpacity>
   );
 }
 
@@ -608,6 +712,42 @@ const styles = StyleSheet.create({
   restaurantPageTitle: { flexDirection: "row", alignItems: "center", gap: 10, flex: 1 },
   restaurantPageLogo: { width: 36, height: 36, borderRadius: 8 },
   restaurantPageName: { fontSize: 16, fontWeight: "800", color: "#111", flex: 1 },
+
+  // Menu summary
+  menuSummary: { paddingHorizontal: 16, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: "#F0F0F0" },
+  menuSummaryText: { fontSize: 13, color: "#AAA", fontWeight: "600" },
+
+  // Category accordion
+  categoryBlock: { borderBottomWidth: 1, borderBottomColor: "#F0F0F0" },
+  categoryHeader: {
+    flexDirection: "row", alignItems: "center", justifyContent: "space-between",
+    paddingHorizontal: 16, paddingVertical: 16, backgroundColor: "#fff",
+  },
+  categoryHeaderLeft: { flex: 1 },
+  categoryName: { fontSize: 16, fontWeight: "800", color: "#111" },
+  categoryCount: { fontSize: 12, color: "#AAA", marginTop: 2 },
+  categoryArrow: { fontSize: 24, color: "#CCC", fontWeight: "300", transform: [{ rotate: "0deg" }] },
+  categoryArrowOpen: { transform: [{ rotate: "90deg" }], color: "#FF4D00" },
+  categoryDishes: { backgroundColor: "#FAFAFA", paddingBottom: 8 },
+
+  // Menu dish row (inside restaurant page)
+  menuRow: {
+    flexDirection: "row", alignItems: "center",
+    paddingHorizontal: 16, paddingVertical: 14,
+    borderBottomWidth: 1, borderBottomColor: "#F5F5F5",
+    backgroundColor: "#fff",
+  },
+  menuRowBody: { flex: 1, paddingRight: 12 },
+  menuRowName: { fontSize: 14, fontWeight: "700", color: "#111", marginBottom: 3 },
+  menuRowDesc: { fontSize: 12, color: "#AAA", lineHeight: 17, marginBottom: 6 },
+  menuRowPriceRow: { flexDirection: "row", alignItems: "baseline", gap: 8 },
+  menuRowPrice: { fontSize: 15, fontWeight: "800", color: "#FF4D00" },
+  menuRowPriceLbp: { fontSize: 11, color: "#AAA" },
+  menuRowImage: { width: 72, height: 72, borderRadius: 10 },
+  menuRowImagePlaceholder: {
+    width: 72, height: 72, borderRadius: 10,
+    backgroundColor: "#F5F5F5", alignItems: "center", justifyContent: "center",
+  },
 
   // Modal
   modalOverlay: { flex: 1, backgroundColor: "rgba(0,0,0,0.5)", justifyContent: "flex-end" },
