@@ -58,6 +58,8 @@ export default function HomeScreen() {
   const [trending, setTrending] = useState<{ up: TrendingDish[]; down: TrendingDish[] } | null>(null);
   const [locationName, setLocationName] = useState<string | null>(null);
   const [locationLoading, setLocationLoading] = useState(false);
+  const [showLocationPicker, setShowLocationPicker] = useState(false);
+  const [locationInput, setLocationInput] = useState("");
 
   useEffect(() => {
     if (typeof localStorage !== "undefined") {
@@ -162,6 +164,27 @@ export default function HomeScreen() {
 
   useEffect(() => { refreshLocation(); }, []);
 
+  const setManualLocation = useCallback(async (placeName: string) => {
+    if (!placeName.trim()) return;
+    setLocationLoading(true);
+    try {
+      const q = encodeURIComponent(placeName.trim() + ", Lebanon");
+      const res = await fetch(
+        `https://nominatim.openstreetmap.org/search?q=${q}&format=json&limit=1`,
+        { headers: { "Accept-Language": "en" } }
+      );
+      const data = await res.json();
+      if (data.length > 0) {
+        setUserLat(parseFloat(data[0].lat));
+        setUserLon(parseFloat(data[0].lon));
+        setLocationName(placeName.trim());
+      }
+    } catch {}
+    setLocationLoading(false);
+    setShowLocationPicker(false);
+    setLocationInput("");
+  }, []);
+
   const doSearch = useCallback(async (q: string, cuisine?: string, sortOverride?: string) => {
     setQuery(q);
     setLoading(true);
@@ -255,15 +278,25 @@ export default function HomeScreen() {
           {locationLoading ? (
             <Text style={styles.tagline}>📍 Detecting your location...</Text>
           ) : userLat ? (
-            <TouchableOpacity onPress={refreshLocation} style={styles.locationRow}>
-              <Text style={styles.locationText}>
-                📍 {locationName ? locationName : "Location detected"} · tap to refresh
-              </Text>
-            </TouchableOpacity>
+            <View style={styles.locationRow}>
+              <TouchableOpacity onPress={refreshLocation}>
+                <Text style={styles.locationText}>📍 {locationName || "Location detected"}</Text>
+              </TouchableOpacity>
+              <Text style={styles.locationSep}> · </Text>
+              <TouchableOpacity onPress={() => setShowLocationPicker(true)}>
+                <Text style={styles.locationChange}>change</Text>
+              </TouchableOpacity>
+            </View>
           ) : (
-            <TouchableOpacity onPress={refreshLocation}>
-              <Text style={styles.tagline}>Compare dish prices across Beirut · tap to enable location</Text>
-            </TouchableOpacity>
+            <View style={styles.locationRow}>
+              <TouchableOpacity onPress={refreshLocation}>
+                <Text style={styles.locationText}>📍 Enable location</Text>
+              </TouchableOpacity>
+              <Text style={styles.locationSep}> · </Text>
+              <TouchableOpacity onPress={() => setShowLocationPicker(true)}>
+                <Text style={styles.locationChange}>set manually</Text>
+              </TouchableOpacity>
+            </View>
           )}
         </View>
 
@@ -653,6 +686,48 @@ export default function HomeScreen() {
           </TouchableOpacity>
         </TouchableOpacity>
       </Modal>
+      {/* Location picker modal */}
+      <Modal visible={showLocationPicker} animationType="slide" transparent onRequestClose={() => setShowLocationPicker(false)}>
+        <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={() => setShowLocationPicker(false)}>
+          <TouchableOpacity activeOpacity={1} style={styles.sheet}>
+            <View style={styles.sheetBody}>
+              <Text style={styles.sheetDishName}>📍 Set Your Location</Text>
+              <Text style={styles.sheetDesc}>Type your area in Lebanon (e.g. Faraya, Achrafieh, Hamra, Jounieh...)</Text>
+              <View style={styles.locationInputRow}>
+                <TextInput
+                  style={styles.locationInputField}
+                  placeholder="e.g. Faraya"
+                  placeholderTextColor="#BBB"
+                  value={locationInput}
+                  onChangeText={setLocationInput}
+                  onSubmitEditing={() => setManualLocation(locationInput)}
+                  autoFocus
+                  returnKeyType="search"
+                />
+                <TouchableOpacity
+                  style={styles.locationInputBtn}
+                  onPress={() => setManualLocation(locationInput)}
+                >
+                  <Text style={{ color: "#fff", fontWeight: "800" }}>Go</Text>
+                </TouchableOpacity>
+              </View>
+              {/* Quick picks */}
+              <Text style={[styles.sectionLabel, { marginTop: 16 }]}>Quick picks</Text>
+              <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
+                {["Achrafieh", "Hamra", "Jounieh", "Faraya", "Dbayeh", "Verdun", "Mar Mikhael", "Badaro", "Jal el Dib", "Kaslik"].map(place => (
+                  <TouchableOpacity key={place} style={styles.chip} onPress={() => setManualLocation(place)}>
+                    <Text style={styles.chipText}>{place}</Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+              <TouchableOpacity style={[styles.btnGoogle, { marginTop: 16 }]} onPress={() => { refreshLocation(); setShowLocationPicker(false); }}>
+                <Text style={styles.btnGoogleText}>📡 Use my GPS instead</Text>
+              </TouchableOpacity>
+            </View>
+          </TouchableOpacity>
+        </TouchableOpacity>
+      </Modal>
+
       {/* Budget modal */}
       <Modal visible={showBudget} animationType="slide" transparent onRequestClose={() => setShowBudget(false)}>
         <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={() => setShowBudget(false)}>
@@ -862,8 +937,19 @@ const styles = StyleSheet.create({
   logo: { fontSize: 38, fontWeight: "800", color: "#FF4D00", letterSpacing: -1 },
   tagline: { fontSize: 13, color: "#888", marginTop: 4 },
 
-  locationRow: { marginTop: 4, alignItems: "center" },
+  locationRow: { marginTop: 4, flexDirection: "row", alignItems: "center" },
   locationText: { fontSize: 13, color: "#FF4D00", fontWeight: "600" },
+  locationSep: { fontSize: 13, color: "#CCC" },
+  locationChange: { fontSize: 13, color: "#888", textDecorationLine: "underline" },
+  locationInputRow: { flexDirection: "row", gap: 8, marginTop: 12 },
+  locationInputField: {
+    flex: 1, borderWidth: 1.5, borderColor: "#E8E8E8", borderRadius: 12,
+    paddingHorizontal: 14, paddingVertical: 12, fontSize: 15, color: "#111",
+  },
+  locationInputBtn: {
+    backgroundColor: "#FF4D00", borderRadius: 12,
+    paddingHorizontal: 20, justifyContent: "center",
+  },
 
   // Search
   searchRow: { flexDirection: "row", gap: 8, marginHorizontal: 16, marginBottom: 20 },
