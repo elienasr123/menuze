@@ -10,6 +10,7 @@ def search_dishes(
     lat: Optional[float] = None,
     lon: Optional[float] = None,
     cuisine: Optional[str] = None,
+    restaurant_id: Optional[str] = None,
 ) -> list[dict]:
 
     has_query = bool(query and query.strip())
@@ -53,6 +54,11 @@ def search_dishes(
         params["cuisine"] = f"%{cuisine}%"
     else:
         cuisine_filter = ""
+
+    # Restaurant filter
+    if restaurant_id:
+        cuisine_filter += " AND r.id = :restaurant_id"
+        params["restaurant_id"] = restaurant_id
 
     rows = db.execute(text(f"""
         SELECT

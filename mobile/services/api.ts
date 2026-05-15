@@ -26,16 +26,16 @@ export async function searchDishes(
   query: string,
   lat?: number,
   lon?: number,
-  cuisine?: string
+  cuisine?: string,
+  restaurantId?: string
 ): Promise<Dish[]> {
   const params: Record<string, string | number> = { q: query };
   if (lat !== undefined && lon !== undefined) {
     params.lat = lat;
     params.lon = lon;
   }
-  if (cuisine) {
-    params.cuisine = cuisine;
-  }
+  if (cuisine) params.cuisine = cuisine;
+  if (restaurantId) params.restaurant_id = restaurantId;
   const { data } = await api.get("/search", { params });
   return data.results;
 }

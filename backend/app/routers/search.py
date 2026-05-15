@@ -13,7 +13,8 @@ def search(
     lat: Optional[float] = Query(None),
     lon: Optional[float] = Query(None),
     cuisine: Optional[str] = Query(None),
+    restaurant_id: Optional[str] = Query(None),
     db: Session = Depends(get_db),
 ):
-    results = search_dishes(db, q, lat=lat, lon=lon, cuisine=cuisine)
+    results = search_dishes(db, q, lat=lat, lon=lon, cuisine=cuisine, restaurant_id=restaurant_id)
     return {"query": q, "results": results}

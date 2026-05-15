@@ -40,6 +40,10 @@ export default function HomeScreen() {
   const [userLat, setUserLat] = useState<number | undefined>();
   const [userLon, setUserLon] = useState<number | undefined>();
   const [selectedDish, setSelectedDish] = useState<Dish | null>(null);
+  const [restaurantPage, setRestaurantPage] = useState<{ id: string; name: string; logo: string } | null>(null);
+  const [restaurantDishes, setRestaurantDishes] = useState<Dish[]>([]);
+  const [restaurantLoading, setRestaurantLoading] = useState(false);
+  const [priceFilter, setPriceFilter] = useState<"all" | "under10" | "10to20" | "over20">("all");
   const [showA2HS, setShowA2HS] = useState(false);
   const [recentSearches, setRecentSearches] = useState<string[]>([]);
 
@@ -92,6 +96,23 @@ export default function HomeScreen() {
   }, [userLat, userLon, recentSearches]);
 
   const handleSearch = useCallback(() => doSearch(query), [query, doSearch]);
+
+  const openRestaurantPage = useCallback(async (id: string, name: string, logo: string) => {
+    setRestaurantPage({ id, name, logo });
+    setRestaurantLoading(true);
+    try {
+      const dishes = await searchDishes("", undefined, undefined, undefined, id);
+      setRestaurantDishes(dishes);
+    } catch (e) { console.error(e); }
+    finally { setRestaurantLoading(false); }
+  }, []);
+
+  const filteredResults = results.filter(d => {
+    if (priceFilter === "under10") return d.price_usd > 0 && d.price_usd < 10;
+    if (priceFilter === "10to20") return d.price_usd >= 10 && d.price_usd <= 20;
+    if (priceFilter === "over20") return d.price_usd > 20;
+    return true;
+  });
 
   const openUrl = (url: string) => {
     if (typeof window !== "undefined") window.location.href = url;
@@ -164,21 +185,34 @@ export default function HomeScreen() {
 
         {!loading && results.length > 0 && (
           <>
-            <TouchableOpacity style={styles.backBtn} onPress={() => { setSearched(false); setQuery(""); setResults([]); }}>
+            <TouchableOpacity style={styles.backBtn} onPress={() => { setSearched(false); setQuery(""); setResults([]); setPriceFilter("all"); }}>
               <Text style={styles.backBtnText}>← Back</Text>
             </TouchableOpacity>
             <View style={styles.resultsHeader}>
               <Text style={styles.resultsCount}>
-                <Text style={styles.resultsCountBold}>{results.length}</Text> results for "<Text style={styles.resultsCountBold}>{query}</Text>"
+                <Text style={styles.resultsCountBold}>{filteredResults.length}</Text> results for "<Text style={styles.resultsCountBold}>{query}</Text>"
               </Text>
               {userLat ? <Text style={styles.resultsSorted}>📍 sorted by distance</Text> : null}
             </View>
+
+            {/* Price filter bar */}
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.filterBar} contentContainerStyle={{ paddingHorizontal: 16, gap: 8 }}>
+              {([["all","All"],["under10","Under $10"],["10to20","$10–$20"],["over20","Over $20"]] as const).map(([val, label]) => (
+                <TouchableOpacity key={val} style={[styles.filterChip, priceFilter === val && styles.filterChipActive]} onPress={() => setPriceFilter(val)}>
+                  <Text style={[styles.filterChipText, priceFilter === val && styles.filterChipTextActive]}>{label}</Text>
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+
             {(() => {
-              const withPrice = results.filter(d => d.price_usd > 0);
+              const withPrice = filteredResults.filter(d => d.price_usd > 0);
               const minPrice = withPrice.length ? Math.min(...withPrice.map(d => d.price_usd)) : null;
               const bestId = minPrice !== null ? withPrice.find(d => d.price_usd === minPrice)?.id : null;
-              return results.map((item) => (
-                <DishCard key={item.id} dish={item} onPress={() => setSelectedDish(item)} isBestPrice={item.id === bestId} />
+              return filteredResults.map((item) => (
+                <DishCard key={item.id} dish={item}
+                  onPress={() => setSelectedDish(item)}
+                  onRestaurantPress={() => openRestaurantPage(item.restaurant_id, item.restaurant_name, item.logo_url)}
+                  isBestPrice={item.id === bestId} />
               ));
             })()}
           </>
@@ -226,7 +260,32 @@ export default function HomeScreen() {
         )}
       </ScrollView>
 
-      {/* Restaurant detail modal */}
+      {/* Restaurant page modal */}
+      <Modal visible={!!restaurantPage} animationType="slide" transparent onRequestClose={() => setRestaurantPage(null)}>
+        <SafeAreaView style={styles.restaurantPage}>
+          <View style={styles.restaurantPageHeader}>
+            <TouchableOpacity onPress={() => setRestaurantPage(null)}>
+              <Text style={styles.backBtnText}>← Back</Text>
+            </TouchableOpacity>
+            <View style={styles.restaurantPageTitle}>
+              {restaurantPage?.logo ? <Image source={{ uri: restaurantPage.logo }} style={styles.restaurantPageLogo} /> : null}
+              <Text style={styles.restaurantPageName} numberOfLines={1}>{restaurantPage?.name}</Text>
+            </View>
+          </View>
+          {restaurantLoading ? (
+            <ActivityIndicator size="large" color="#FF4D00" style={{ marginTop: 40 }} />
+          ) : (
+            <ScrollView contentContainerStyle={{ padding: 16 }}>
+              <Text style={styles.sectionLabel}>{restaurantDishes.length} dishes</Text>
+              {restaurantDishes.map(dish => (
+                <DishCard key={dish.id} dish={dish} onPress={() => { setRestaurantPage(null); setSelectedDish(dish); }} />
+              ))}
+            </ScrollView>
+          )}
+        </SafeAreaView>
+      </Modal>
+
+      {/* Dish detail modal */}
       <Modal visible={!!selectedDish} animationType="slide" transparent onRequestClose={() => setSelectedDish(null)}>
         <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={() => setSelectedDish(null)}>
           <TouchableOpacity activeOpacity={1} style={styles.sheet}>
@@ -284,7 +343,7 @@ export default function HomeScreen() {
   );
 }
 
-function DishCard({ dish, onPress, isBestPrice }: { dish: Dish; onPress: () => void; isBestPrice?: boolean }) {
+function DishCard({ dish, onPress, onRestaurantPress, isBestPrice }: { dish: Dish; onPress: () => void; onRestaurantPress?: () => void; isBestPrice?: boolean }) {
   const shareOnWhatsApp = (e: any) => {
     e.stopPropagation();
     const price = dish.price_usd > 0 ? `$${dish.price_usd.toFixed(2)}` : `${Math.round(dish.price_lbp / 1000)}k LBP`;
@@ -308,12 +367,12 @@ function DishCard({ dish, onPress, isBestPrice }: { dish: Dish; onPress: () => v
       )}
       <View style={styles.cardBody}>
         <Text style={styles.dishName} numberOfLines={1}>{dish.dish_name}</Text>
-        <View style={styles.restaurantRow}>
+        <TouchableOpacity style={styles.restaurantRow} onPress={onRestaurantPress} disabled={!onRestaurantPress}>
           {dish.logo_url ? (
             <Image source={{ uri: dish.logo_url }} style={styles.logo_img} />
           ) : null}
-          <Text style={styles.restaurantName} numberOfLines={1}>{dish.restaurant_name}</Text>
-        </View>
+          <Text style={[styles.restaurantName, onRestaurantPress && styles.restaurantNameLink]} numberOfLines={1}>{dish.restaurant_name}</Text>
+        </TouchableOpacity>
         {dish.description ? (
           <Text style={styles.description} numberOfLines={1}>{dish.description}</Text>
         ) : null}
@@ -433,6 +492,7 @@ const styles = StyleSheet.create({
   restaurantRow: { flexDirection: "row", alignItems: "center", gap: 5, marginBottom: 3 },
   logo_img: { width: 16, height: 16, borderRadius: 3 },
   restaurantName: { fontSize: 11, color: "#888", flex: 1 },
+  restaurantNameLink: { color: "#FF4D00", textDecorationLine: "underline" },
   description: { fontSize: 11, color: "#BBB", lineHeight: 15 },
   distance: { fontSize: 11, color: "#FF4D00", marginTop: 3, fontWeight: "600" },
   priceBox: { justifyContent: "center", alignItems: "flex-end", paddingHorizontal: 10, minWidth: 70 },
@@ -440,6 +500,20 @@ const styles = StyleSheet.create({
   priceLbp: { fontSize: 10, color: "#AAA", marginTop: 2 },
   shareBtn: { marginTop: 8, backgroundColor: "#F0F0F0", borderRadius: 8, width: 28, height: 28, alignItems: "center", justifyContent: "center" },
   shareBtnText: { fontSize: 14, color: "#555", fontWeight: "700" },
+
+  // Filter bar
+  filterBar: { marginBottom: 10 },
+  filterChip: { paddingHorizontal: 14, paddingVertical: 7, borderRadius: 20, backgroundColor: "#fff", borderWidth: 1, borderColor: "#E8E8E8" },
+  filterChipActive: { backgroundColor: "#FF4D00", borderColor: "#FF4D00" },
+  filterChipText: { fontSize: 13, color: "#555", fontWeight: "600" },
+  filterChipTextActive: { color: "#fff" },
+
+  // Restaurant page
+  restaurantPage: { flex: 1, backgroundColor: "#F8F8F6" },
+  restaurantPageHeader: { flexDirection: "row", alignItems: "center", paddingHorizontal: 16, paddingVertical: 12, backgroundColor: "#fff", borderBottomWidth: 1, borderBottomColor: "#F0F0F0", gap: 12 },
+  restaurantPageTitle: { flexDirection: "row", alignItems: "center", gap: 10, flex: 1 },
+  restaurantPageLogo: { width: 36, height: 36, borderRadius: 8 },
+  restaurantPageName: { fontSize: 16, fontWeight: "800", color: "#111", flex: 1 },
 
   // Modal
   modalOverlay: { flex: 1, backgroundColor: "rgba(0,0,0,0.5)", justifyContent: "flex-end" },
