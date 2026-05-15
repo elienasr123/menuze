@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, Query, Request
 from sqlalchemy.orm import Session
 from app.database import get_db
 from app.services.search import search_dishes
-from app.main import limiter
+from app.limiter import limiter
 from typing import Optional
 
 router = APIRouter(prefix="/search", tags=["search"])
