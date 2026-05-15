@@ -28,11 +28,13 @@ def search_dishes(
     # Distance column
     if lat is not None and lon is not None:
         distance_col = """
-            ROUND((6371 * acos(
-                LEAST(1.0, cos(radians(:lat)) * cos(radians(r.lat::float)) *
-                cos(radians(r.lon::float) - radians(:lon)) +
-                sin(radians(:lat)) * sin(radians(r.lat::float)))
-            ))::numeric, 1) AS distance_km,
+            CASE WHEN r.lat IS NOT NULL AND r.lat != 0 AND r.lon IS NOT NULL AND r.lon != 0 THEN
+                ROUND((6371 * acos(
+                    LEAST(1.0, cos(radians(:lat)) * cos(radians(r.lat::float)) *
+                    cos(radians(r.lon::float) - radians(:lon)) +
+                    sin(radians(:lat)) * sin(radians(r.lat::float)))
+                ))::numeric, 1)
+            ELSE NULL END AS distance_km,
         """
         params: dict = {"limit": limit, "lat": lat, "lon": lon}
     else:
@@ -101,6 +103,7 @@ def search_dishes(
         FROM dishes d
         JOIN restaurants r ON r.id = d.restaurant_id
         WHERE {text_filter}
+        AND (d.price_usd > 0 OR d.price_lbp >= 1000)
         {cuisine_filter}
         {order_by}
         LIMIT :limit
