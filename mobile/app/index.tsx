@@ -91,7 +91,7 @@ export default function HomeScreen() {
     try {
       const [dishes, restaurants] = await Promise.all([
         searchDishes(q.trim(), userLat, userLon, cuisine, undefined, activeSort),
-        q.trim() ? searchRestaurants(q.trim()) : Promise.resolve([]),
+        q.trim() ? searchRestaurants(q.trim()).catch(() => []) : Promise.resolve([]),
       ]);
       setResults(dishes);
       setRestaurantResults(restaurants);

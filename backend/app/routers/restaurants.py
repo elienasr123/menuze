@@ -30,9 +30,9 @@ def search_restaurants(
             COUNT(d.id) AS dish_count
         FROM restaurants r
         LEFT JOIN dishes d ON d.restaurant_id = r.id
-            AND (d.price_usd > 0 OR d.price_lbp >= 1000)
         WHERE r.name ILIKE :q
         GROUP BY r.id
+        HAVING COUNT(d.id) > 0
         ORDER BY
             CASE WHEN r.name ILIKE :exact THEN 0 ELSE 1 END,
             r.name
