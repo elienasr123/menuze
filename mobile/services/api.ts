@@ -2,7 +2,12 @@ import axios from "axios";
 
 const BASE_URL = "https://menuze-production.up.railway.app";
 
-const api = axios.create({ baseURL: BASE_URL });
+const api = axios.create({
+  baseURL: BASE_URL,
+  headers: {
+    "x-api-key": "ad5e09f11e3f8a1003282286ba6960763805974613609181ced479647684125f",
+  },
+});
 
 export interface Dish {
   id: number;

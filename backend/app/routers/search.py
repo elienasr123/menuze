@@ -1,14 +1,17 @@
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Query, Request
 from sqlalchemy.orm import Session
 from app.database import get_db
 from app.services.search import search_dishes
+from app.main import limiter
 from typing import Optional
 
 router = APIRouter(prefix="/search", tags=["search"])
 
 
 @router.get("")
+@limiter.limit("30/minute")
 def search(
+    request: Request,
     q: str = Query(""),
     lat: Optional[float] = Query(None),
     lon: Optional[float] = Query(None),
