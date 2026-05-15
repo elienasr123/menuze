@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, Text, Numeric, ForeignKey
+from sqlalchemy import Column, Integer, Text, Numeric, ForeignKey, DateTime
 from sqlalchemy.orm import relationship
 from app.database import Base
 
@@ -25,5 +25,8 @@ class Dish(Base):
     description = Column(Text)
     image_url = Column(Text)
     category = Column(Text)
+    prev_price_usd = Column(Numeric, default=None)
+    prev_price_lbp = Column(Numeric, default=None)
+    price_updated_at = Column(DateTime(timezone=True), default=None)
 
     restaurant = relationship("Restaurant", back_populates="dishes")

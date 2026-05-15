@@ -4,7 +4,7 @@ import {
   ActivityIndicator, TouchableOpacity, SafeAreaView,
   Modal, ScrollView, Platform, Linking,
 } from "react-native";
-import { searchDishes, searchRestaurants, Dish, Restaurant } from "../services/api";
+import { searchDishes, searchRestaurants, getTrending, Dish, Restaurant, TrendingDish } from "../services/api";
 
 const POPULAR = [
   { label: "🥙 Shawarma", q: "shawarma" },
@@ -55,6 +55,7 @@ export default function HomeScreen() {
   const [alertPrice, setAlertPrice] = useState("");
   const [alertSaved, setAlertSaved] = useState(false);
   const [sharedComparison, setSharedComparison] = useState(false);
+  const [trending, setTrending] = useState<{ up: TrendingDish[]; down: TrendingDish[] } | null>(null);
 
   useEffect(() => {
     if (typeof localStorage !== "undefined") {
@@ -117,6 +118,10 @@ export default function HomeScreen() {
       const dismissed = localStorage.getItem("a2hs_dismissed");
       if (isIOS && !isStandalone && !dismissed) setShowA2HS(true);
     }
+  }, []);
+
+  useEffect(() => {
+    getTrending().then(setTrending).catch(() => {});
   }, []);
 
   useEffect(() => {
@@ -402,6 +407,60 @@ export default function HomeScreen() {
               <Text style={styles.bannerTitle}>🔥 Find the best price</Text>
               <Text style={styles.bannerSub}>Search any dish and compare prices across 760+ restaurants in Beirut</Text>
             </View>
+
+            {/* 📊 Lebanon Price Index */}
+            {trending && (trending.up.length > 0 || trending.down.length > 0) && (
+              <>
+                <Text style={styles.sectionLabel}>📊 Lebanon Price Index</Text>
+                <Text style={styles.trendSubtitle}>Recent price changes across Beirut restaurants</Text>
+
+                {trending.down.length > 0 && (
+                  <>
+                    <Text style={styles.trendGroupLabel}>📉 Price dropped</Text>
+                    {trending.down.slice(0, 5).map(d => (
+                      <TouchableOpacity key={d.id} style={styles.trendRow}
+                        onPress={() => openRestaurantPage(d.restaurant_id, d.restaurant_name, d.logo_url)}>
+                        {d.logo_url ? <Image source={{ uri: d.logo_url }} style={styles.trendLogo} /> :
+                          <View style={[styles.trendLogo, { backgroundColor: "#F5F5F5", alignItems: "center", justifyContent: "center" }]}><Text>🍽</Text></View>}
+                        <View style={{ flex: 1 }}>
+                          <Text style={styles.trendDishName} numberOfLines={1}>{d.dish_name}</Text>
+                          <Text style={styles.trendRestaurant} numberOfLines={1}>{d.restaurant_name}</Text>
+                        </View>
+                        <View style={styles.trendPriceCol}>
+                          <Text style={styles.trendPriceCurrent}>
+                            {d.price_usd > 0 ? `$${d.price_usd.toFixed(2)}` : `${Math.round(d.price_lbp / 1000)}k`}
+                          </Text>
+                          <Text style={styles.trendBadgeDown}>{d.change_pct}%</Text>
+                        </View>
+                      </TouchableOpacity>
+                    ))}
+                  </>
+                )}
+
+                {trending.up.length > 0 && (
+                  <>
+                    <Text style={[styles.trendGroupLabel, { color: "#E53E3E" }]}>📈 Price went up</Text>
+                    {trending.up.slice(0, 5).map(d => (
+                      <TouchableOpacity key={d.id} style={styles.trendRow}
+                        onPress={() => openRestaurantPage(d.restaurant_id, d.restaurant_name, d.logo_url)}>
+                        {d.logo_url ? <Image source={{ uri: d.logo_url }} style={styles.trendLogo} /> :
+                          <View style={[styles.trendLogo, { backgroundColor: "#F5F5F5", alignItems: "center", justifyContent: "center" }]}><Text>🍽</Text></View>}
+                        <View style={{ flex: 1 }}>
+                          <Text style={styles.trendDishName} numberOfLines={1}>{d.dish_name}</Text>
+                          <Text style={styles.trendRestaurant} numberOfLines={1}>{d.restaurant_name}</Text>
+                        </View>
+                        <View style={styles.trendPriceCol}>
+                          <Text style={styles.trendPriceCurrent}>
+                            {d.price_usd > 0 ? `$${d.price_usd.toFixed(2)}` : `${Math.round(d.price_lbp / 1000)}k`}
+                          </Text>
+                          <Text style={styles.trendBadgeUp}>+{d.change_pct}%</Text>
+                        </View>
+                      </TouchableOpacity>
+                    ))}
+                  </>
+                )}
+              </>
+            )}
           </>
         )}
       </ScrollView>
@@ -679,8 +738,22 @@ function RestaurantDishRow({ dish, onPress }: { dish: Dish; onPress: () => void 
   );
 }
 
+function priceTrend(dish: Dish): "up" | "down" | null {
+  const cur = dish.price_usd > 0 ? dish.price_usd : dish.price_lbp / 89500;
+  const prev = dish.prev_price_usd != null && dish.prev_price_usd > 0
+    ? dish.prev_price_usd
+    : dish.prev_price_lbp != null && dish.prev_price_lbp > 0
+    ? dish.prev_price_lbp / 89500
+    : null;
+  if (!prev || !cur) return null;
+  if (cur > prev * 1.01) return "up";
+  if (cur < prev * 0.99) return "down";
+  return null;
+}
+
 function DishCard({ dish, onPress, onRestaurantPress, isBestPrice }: { dish: Dish; onPress: () => void; onRestaurantPress?: () => void; isBestPrice?: boolean }) {
   const [shared, setShared] = useState(false);
+  const trend = priceTrend(dish);
 
   const shareOnWhatsApp = (e: any) => {
     e.stopPropagation();
@@ -732,6 +805,8 @@ function DishCard({ dish, onPress, onRestaurantPress, isBestPrice }: { dish: Dis
         ) : hasLbp ? (
           <Text style={styles.priceLbpMain}>{Math.round(dish.price_lbp / 1000)}k{"\n"}LBP</Text>
         ) : null}
+        {trend === "down" && <Text style={styles.trendArrowDown}>↓</Text>}
+        {trend === "up" && <Text style={styles.trendArrowUp}>↑</Text>}
         <TouchableOpacity onPress={shareOnWhatsApp} style={[styles.shareBtn, shared && styles.shareBtnDone]}>
           <Text style={styles.shareBtnText}>{shared ? "✓" : "↗"}</Text>
         </TouchableOpacity>
@@ -963,4 +1038,24 @@ const styles = StyleSheet.create({
   alertInput: { flex: 1, fontSize: 20, paddingVertical: 14, color: "#111" },
   alertSuccess: { backgroundColor: "#D4EDDA", borderRadius: 12, padding: 14, marginTop: 14 },
   alertSuccessText: { color: "#155724", fontWeight: "600", textAlign: "center" },
+
+  // Trend arrows on dish cards
+  trendArrowDown: { fontSize: 13, fontWeight: "800", color: "#22C55E", marginTop: 2 },
+  trendArrowUp: { fontSize: 13, fontWeight: "800", color: "#E53E3E", marginTop: 2 },
+
+  // Price index section
+  trendSubtitle: { fontSize: 12, color: "#AAA", marginHorizontal: 16, marginBottom: 12, marginTop: -6 },
+  trendGroupLabel: { fontSize: 13, fontWeight: "700", color: "#22C55E", marginHorizontal: 16, marginBottom: 6, marginTop: 4 },
+  trendRow: {
+    flexDirection: "row", alignItems: "center", backgroundColor: "#fff",
+    marginHorizontal: 16, marginBottom: 6, borderRadius: 12, padding: 10,
+    shadowColor: "#000", shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.05, shadowRadius: 4, elevation: 1,
+  },
+  trendLogo: { width: 36, height: 36, borderRadius: 8, marginRight: 10 },
+  trendDishName: { fontSize: 13, fontWeight: "700", color: "#111" },
+  trendRestaurant: { fontSize: 11, color: "#AAA", marginTop: 1 },
+  trendPriceCol: { alignItems: "flex-end", gap: 3 },
+  trendPriceCurrent: { fontSize: 14, fontWeight: "800", color: "#111" },
+  trendBadgeDown: { fontSize: 11, fontWeight: "700", color: "#22C55E", backgroundColor: "#F0FFF4", paddingHorizontal: 6, paddingVertical: 2, borderRadius: 6 },
+  trendBadgeUp: { fontSize: 11, fontWeight: "700", color: "#E53E3E", backgroundColor: "#FFF5F5", paddingHorizontal: 6, paddingVertical: 2, borderRadius: 6 },
 });

@@ -106,6 +106,8 @@ def search_dishes(
             d.description,
             d.image_url,
             d.category,
+            d.prev_price_usd,
+            d.prev_price_lbp,
             r.id AS restaurant_id,
             r.name AS restaurant_name,
             r.logo_url,
@@ -129,7 +131,7 @@ def search_dishes(
         r = dict(row)
         r.pop("_dummy", None)
         for key in ("restaurant_lat", "restaurant_lon", "distance_km",
-                    "price_lbp", "price_usd", "rank"):
+                    "price_lbp", "price_usd", "prev_price_usd", "prev_price_lbp", "rank"):
             if r.get(key) is not None:
                 r[key] = float(r[key])
         results.append(r)

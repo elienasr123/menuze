@@ -14,6 +14,8 @@ export interface Dish {
   dish_name: string;
   price_lbp: number;
   price_usd: number;
+  prev_price_usd: number | null;
+  prev_price_lbp: number | null;
   currency: string;
   description: string;
   image_url: string;
@@ -35,6 +37,20 @@ export interface Restaurant {
   lat: number | null;
   lon: number | null;
   dish_count: number;
+}
+
+export interface TrendingDish {
+  id: number;
+  dish_name: string;
+  price_usd: number;
+  price_lbp: number;
+  prev_price_usd: number | null;
+  prev_price_lbp: number | null;
+  change_pct: number;
+  restaurant_id: string;
+  restaurant_name: string;
+  logo_url: string;
+  cuisine: string;
 }
 
 export async function searchRestaurants(query: string): Promise<Restaurant[]> {
@@ -59,4 +75,9 @@ export async function searchDishes(
   if (restaurantId) params.restaurant_id = restaurantId;
   const { data } = await api.get("/search", { params });
   return data.results;
+}
+
+export async function getTrending(): Promise<{ up: TrendingDish[]; down: TrendingDish[] }> {
+  const { data } = await api.get("/trending");
+  return data;
 }
