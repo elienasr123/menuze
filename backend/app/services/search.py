@@ -15,8 +15,9 @@ def search_dishes(
 
     has_query = bool(query and query.strip())
     has_cuisine = bool(cuisine and cuisine.strip())
+    has_restaurant = bool(restaurant_id)
 
-    if not has_query and not has_cuisine:
+    if not has_query and not has_cuisine and not has_restaurant:
         return []
 
     # Distance column
