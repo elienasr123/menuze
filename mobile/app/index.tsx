@@ -56,6 +56,8 @@ export default function HomeScreen() {
   const [alertSaved, setAlertSaved] = useState(false);
   const [sharedComparison, setSharedComparison] = useState(false);
   const [trending, setTrending] = useState<{ up: TrendingDish[]; down: TrendingDish[] } | null>(null);
+  const [locationName, setLocationName] = useState<string | null>(null);
+  const [locationLoading, setLocationLoading] = useState(false);
 
   useEffect(() => {
     if (typeof localStorage !== "undefined") {
@@ -124,14 +126,41 @@ export default function HomeScreen() {
     getTrending().then(setTrending).catch(() => {});
   }, []);
 
-  useEffect(() => {
-    if (typeof navigator !== "undefined" && navigator.geolocation) {
-      navigator.geolocation.getCurrentPosition(
-        (pos) => { setUserLat(pos.coords.latitude); setUserLon(pos.coords.longitude); },
-        () => {}
-      );
-    }
+  const refreshLocation = useCallback(() => {
+    if (typeof navigator === "undefined" || !navigator.geolocation) return;
+    setLocationLoading(true);
+    setLocationName(null);
+    navigator.geolocation.getCurrentPosition(
+      async (pos) => {
+        const lat = pos.coords.latitude;
+        const lon = pos.coords.longitude;
+        setUserLat(lat);
+        setUserLon(lon);
+        setLocationLoading(false);
+        // Reverse geocode to get area name
+        try {
+          const res = await fetch(
+            `https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lon}&format=json`,
+            { headers: { "Accept-Language": "en" } }
+          );
+          const data = await res.json();
+          const name =
+            data.address?.village ||
+            data.address?.suburb ||
+            data.address?.town ||
+            data.address?.city ||
+            data.address?.county ||
+            data.address?.state ||
+            "your location";
+          setLocationName(name);
+        } catch { setLocationName(null); }
+      },
+      () => { setLocationLoading(false); },
+      { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 }
+    );
   }, []);
+
+  useEffect(() => { refreshLocation(); }, []);
 
   const doSearch = useCallback(async (q: string, cuisine?: string, sortOverride?: string) => {
     setQuery(q);
@@ -223,9 +252,19 @@ export default function HomeScreen() {
         {/* Header */}
         <View style={styles.header}>
           <Text style={styles.logo}>menuze</Text>
-          <Text style={styles.tagline}>
-            {userLat ? "📍 Sorted by distance from you" : "Compare dish prices across Beirut"}
-          </Text>
+          {locationLoading ? (
+            <Text style={styles.tagline}>📍 Detecting your location...</Text>
+          ) : userLat ? (
+            <TouchableOpacity onPress={refreshLocation} style={styles.locationRow}>
+              <Text style={styles.locationText}>
+                📍 {locationName ? locationName : "Location detected"} · tap to refresh
+              </Text>
+            </TouchableOpacity>
+          ) : (
+            <TouchableOpacity onPress={refreshLocation}>
+              <Text style={styles.tagline}>Compare dish prices across Beirut · tap to enable location</Text>
+            </TouchableOpacity>
+          )}
         </View>
 
         {/* Search bar */}
@@ -266,7 +305,7 @@ export default function HomeScreen() {
               <Text style={styles.resultsCount}>
                 <Text style={styles.resultsCountBold}>{filteredResults.length}</Text> results for "<Text style={styles.resultsCountBold}>{query}</Text>"
               </Text>
-              {userLat ? <Text style={styles.resultsSorted}>📍 sorted by distance</Text> : null}
+              {userLat ? <Text style={styles.resultsSorted}>📍 {locationName || "near you"}</Text> : null}
             </View>
 
             {/* Restaurant matches */}
@@ -822,6 +861,9 @@ const styles = StyleSheet.create({
   header: { alignItems: "center", paddingTop: 32, paddingBottom: 20 },
   logo: { fontSize: 38, fontWeight: "800", color: "#FF4D00", letterSpacing: -1 },
   tagline: { fontSize: 13, color: "#888", marginTop: 4 },
+
+  locationRow: { marginTop: 4, alignItems: "center" },
+  locationText: { fontSize: 13, color: "#FF4D00", fontWeight: "600" },
 
   // Search
   searchRow: { flexDirection: "row", gap: 8, marginHorizontal: 16, marginBottom: 20 },
