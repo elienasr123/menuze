@@ -49,6 +49,12 @@ export default function HomeScreen() {
   const [restaurantResults, setRestaurantResults] = useState<Restaurant[]>([]);
   const [showA2HS, setShowA2HS] = useState(false);
   const [recentSearches, setRecentSearches] = useState<string[]>([]);
+  const [budget, setBudget] = useState<number | null>(null);
+  const [showBudget, setShowBudget] = useState(false);
+  const [alertDish, setAlertDish] = useState<Dish | null>(null);
+  const [alertPrice, setAlertPrice] = useState("");
+  const [alertSaved, setAlertSaved] = useState(false);
+  const [sharedComparison, setSharedComparison] = useState(false);
 
   useEffect(() => {
     if (typeof localStorage !== "undefined") {
@@ -62,6 +68,45 @@ export default function HomeScreen() {
     const updated = [q, ...recentSearches.filter(r => r !== q)].slice(0, 5);
     setRecentSearches(updated);
     if (typeof localStorage !== "undefined") localStorage.setItem("recent_searches", JSON.stringify(updated));
+  };
+
+  // Price alerts — check on app open
+  useEffect(() => {
+    if (typeof localStorage === "undefined") return;
+    const alerts: Array<{ dishId: number; dishName: string; restaurantName: string; maxPrice: number; currency: string }> =
+      JSON.parse(localStorage.getItem("price_alerts") || "[]");
+    if (!alerts.length) return;
+    // Check each alert by searching the dish name
+    alerts.forEach(async (alert) => {
+      try {
+        const dishes = await searchDishes(alert.dishName, undefined, undefined, undefined, undefined, "price_asc");
+        const match = dishes.find(d => d.id === alert.dishId);
+        if (!match) return;
+        const currentPrice = match.price_usd > 0 ? match.price_usd : match.price_lbp / 89500;
+        if (currentPrice <= alert.maxPrice) {
+          const price = match.price_usd > 0 ? `$${match.price_usd.toFixed(2)}` : `${Math.round(match.price_lbp / 1000)}k LBP`;
+          if (typeof Notification !== "undefined" && Notification.permission === "granted") {
+            new Notification(`💰 Price alert: ${alert.dishName}`, {
+              body: `Now ${price} at ${alert.restaurantName}`,
+            });
+          }
+        }
+      } catch {}
+    });
+  }, []);
+
+  const saveAlert = (dish: Dish, maxPriceUsd: number) => {
+    if (typeof localStorage === "undefined") return;
+    const alerts: any[] = JSON.parse(localStorage.getItem("price_alerts") || "[]");
+    const existing = alerts.findIndex(a => a.dishId === dish.id);
+    const entry = {
+      dishId: dish.id, dishName: dish.dish_name,
+      restaurantName: dish.restaurant_name,
+      maxPrice: maxPriceUsd, currency: "usd",
+    };
+    if (existing >= 0) alerts[existing] = entry;
+    else alerts.push(entry);
+    localStorage.setItem("price_alerts", JSON.stringify(alerts));
   };
 
   useEffect(() => {
@@ -130,10 +175,11 @@ export default function HomeScreen() {
 
   const filteredResults = results.filter(d => {
     const usd = d.price_usd > 0 ? d.price_usd : d.price_lbp > 0 ? d.price_lbp / 89500 : null;
-    if (usd === null) return priceFilter === "all";
-    if (priceFilter === "under10") return usd < 10;
-    if (priceFilter === "10to20") return usd >= 10 && usd <= 20;
-    if (priceFilter === "over20") return usd > 20;
+    if (usd === null) return priceFilter === "all" && !budget;
+    if (priceFilter === "under10" && usd >= 10) return false;
+    if (priceFilter === "10to20" && (usd < 10 || usd > 20)) return false;
+    if (priceFilter === "over20" && usd <= 20) return false;
+    if (budget !== null && usd > budget) return false;
     return true;
   });
 
@@ -256,7 +302,7 @@ export default function HomeScreen() {
                 ["relevance", "⭐ Relevant"],
                 ["price_asc", "💰 Cheapest"],
                 ["price_desc", "🏆 Priciest"],
-                ...(userLat ? [["distance", "📍 Nearest"] as const] : []),
+                ...(userLat ? [["distance", "📍 Nearest"], ["value", "🎯 Best Value"]] as [string,string][] : []),
               ] as [string, string][]).map(([val, label]) => (
                 <TouchableOpacity key={val} style={[styles.filterChip, sort === val && styles.filterChipActive]} onPress={() => changeSort(val)}>
                   <Text style={[styles.filterChipText, sort === val && styles.filterChipTextActive]}>{label}</Text>
@@ -264,14 +310,45 @@ export default function HomeScreen() {
               ))}
             </ScrollView>
 
-            {/* Price filter bar */}
+            {/* Price filter + budget row */}
             <ScrollView horizontal showsHorizontalScrollIndicator={false} style={[styles.filterBar, { marginBottom: 4 }]} contentContainerStyle={{ paddingHorizontal: 16, gap: 8 }}>
               {([["all","All"],["under10","Under $10"],["10to20","$10–$20"],["over20","Over $20"]] as const).map(([val, label]) => (
                 <TouchableOpacity key={val} style={[styles.filterChipOutline, priceFilter === val && styles.filterChipActive]} onPress={() => setPriceFilter(val)}>
                   <Text style={[styles.filterChipText, priceFilter === val && styles.filterChipTextActive]}>{label}</Text>
                 </TouchableOpacity>
               ))}
+              <TouchableOpacity
+                style={[styles.filterChipOutline, budget !== null && styles.filterChipActive]}
+                onPress={() => setShowBudget(true)}
+              >
+                <Text style={[styles.filterChipText, budget !== null && styles.filterChipTextActive]}>
+                  {budget !== null ? `🎯 Under $${budget}` : "🎯 My Budget"}
+                </Text>
+              </TouchableOpacity>
             </ScrollView>
+
+            {/* WhatsApp comparison share */}
+            {filteredResults.length > 1 && (
+              <TouchableOpacity
+                style={styles.shareCompareBtn}
+                onPress={() => {
+                  const lines = filteredResults.slice(0, 8).map(d => {
+                    const price = d.price_usd > 0 ? `$${d.price_usd.toFixed(2)}` : `${Math.round(d.price_lbp / 1000)}k LBP`;
+                    return `• ${d.restaurant_name}: ${price}`;
+                  });
+                  const text = encodeURIComponent(
+                    `🍽 ${query} prices in Beirut:\n${lines.join("\n")}\n\nCompare more on menuze 👉 https://elienasr123.github.io/menuze/`
+                  );
+                  if (typeof window !== "undefined") window.location.href = `https://wa.me/?text=${text}`;
+                  setSharedComparison(true);
+                  setTimeout(() => setSharedComparison(false), 2000);
+                }}
+              >
+                <Text style={styles.shareCompareBtnText}>
+                  {sharedComparison ? "✓ Shared!" : `📤 Share ${query} price comparison`}
+                </Text>
+              </TouchableOpacity>
+            )}
 
             {(() => {
               const withPrice = filteredResults.filter(d => d.price_usd > 0);
@@ -465,9 +542,98 @@ export default function HomeScreen() {
                     <TouchableOpacity style={styles.btnGoogle} onPress={() => openGoogleSearch(selectedDish)}>
                       <Text style={styles.btnGoogleText}>🔍 Search on Google</Text>
                     </TouchableOpacity>
+                    <TouchableOpacity
+                      style={styles.btnAlert}
+                      onPress={() => { setAlertDish(selectedDish); setAlertPrice(""); setAlertSaved(false); }}
+                    >
+                      <Text style={styles.btnAlertText}>🔔 Alert me if price drops</Text>
+                    </TouchableOpacity>
                   </View>
                 </View>
               </ScrollView>
+            )}
+          </TouchableOpacity>
+        </TouchableOpacity>
+      </Modal>
+      {/* Budget modal */}
+      <Modal visible={showBudget} animationType="slide" transparent onRequestClose={() => setShowBudget(false)}>
+        <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={() => setShowBudget(false)}>
+          <TouchableOpacity activeOpacity={1} style={styles.sheet}>
+            <View style={styles.sheetBody}>
+              <Text style={styles.sheetDishName}>🎯 Set My Budget</Text>
+              <Text style={styles.sheetDesc}>Only show dishes under your budget (in USD)</Text>
+              <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 10, marginVertical: 16 }}>
+                {[5, 10, 15, 20, 30, 50].map(v => (
+                  <TouchableOpacity
+                    key={v}
+                    style={[styles.budgetChip, budget === v && styles.budgetChipActive]}
+                    onPress={() => { setBudget(v); setShowBudget(false); }}
+                  >
+                    <Text style={[styles.budgetChipText, budget === v && styles.budgetChipTextActive]}>${v}</Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+              {budget !== null && (
+                <TouchableOpacity style={styles.btnGoogle} onPress={() => { setBudget(null); setShowBudget(false); }}>
+                  <Text style={styles.btnGoogleText}>✕ Clear budget</Text>
+                </TouchableOpacity>
+              )}
+            </View>
+          </TouchableOpacity>
+        </TouchableOpacity>
+      </Modal>
+
+      {/* Price alert modal */}
+      <Modal visible={!!alertDish} animationType="slide" transparent onRequestClose={() => setAlertDish(null)}>
+        <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={() => setAlertDish(null)}>
+          <TouchableOpacity activeOpacity={1} style={styles.sheet}>
+            {alertDish && (
+              <View style={styles.sheetBody}>
+                <Text style={styles.sheetDishName}>🔔 Price Alert</Text>
+                <Text style={styles.sheetDesc}>
+                  Alert me when <Text style={{ fontWeight: "700", color: "#111" }}>{alertDish.dish_name}</Text> at {alertDish.restaurant_name} drops below:
+                </Text>
+                {/* Current price */}
+                <View style={[styles.sheetPriceRow, { marginBottom: 8 }]}>
+                  <Text style={{ fontSize: 13, color: "#888" }}>Current price: </Text>
+                  <Text style={{ fontSize: 13, fontWeight: "700", color: "#FF4D00" }}>
+                    {alertDish.price_usd > 0 ? `$${alertDish.price_usd.toFixed(2)}` : `${Math.round(alertDish.price_lbp / 1000)}k LBP`}
+                  </Text>
+                </View>
+                {/* Price input */}
+                <View style={styles.alertInputRow}>
+                  <Text style={styles.alertDollar}>$</Text>
+                  <TextInput
+                    style={styles.alertInput}
+                    placeholder="e.g. 8"
+                    placeholderTextColor="#BBB"
+                    keyboardType="decimal-pad"
+                    value={alertPrice}
+                    onChangeText={setAlertPrice}
+                  />
+                </View>
+                {alertSaved ? (
+                  <View style={styles.alertSuccess}>
+                    <Text style={styles.alertSuccessText}>✓ Alert saved! We'll notify you when the price drops.</Text>
+                  </View>
+                ) : (
+                  <TouchableOpacity
+                    style={[styles.btnDirections, { marginTop: 16 }]}
+                    onPress={async () => {
+                      const max = parseFloat(alertPrice);
+                      if (isNaN(max) || max <= 0) return;
+                      // Request notification permission
+                      if (typeof Notification !== "undefined" && Notification.permission === "default") {
+                        await Notification.requestPermission();
+                      }
+                      saveAlert(alertDish, max);
+                      setAlertSaved(true);
+                    }}
+                  >
+                    <Text style={styles.btnDirectionsText}>Save Alert</Text>
+                  </TouchableOpacity>
+                )}
+              </View>
             )}
           </TouchableOpacity>
         </TouchableOpacity>
@@ -772,4 +938,29 @@ const styles = StyleSheet.create({
   btnDirectionsText: { color: "#fff", fontWeight: "700", fontSize: 15 },
   btnGoogle: { backgroundColor: "#F5F5F5", borderRadius: 14, paddingVertical: 15, alignItems: "center" },
   btnGoogleText: { color: "#333", fontWeight: "600", fontSize: 15 },
+  btnAlert: { backgroundColor: "#FFF5F2", borderRadius: 14, paddingVertical: 15, alignItems: "center", borderWidth: 1.5, borderColor: "#FFD4C2" },
+  btnAlertText: { color: "#FF4D00", fontWeight: "700", fontSize: 15 },
+
+  // Share comparison
+  shareCompareBtn: {
+    marginHorizontal: 16, marginBottom: 10, backgroundColor: "#25D366",
+    borderRadius: 14, paddingVertical: 12, alignItems: "center",
+  },
+  shareCompareBtnText: { color: "#fff", fontWeight: "700", fontSize: 14 },
+
+  // Budget chips
+  budgetChip: {
+    paddingHorizontal: 20, paddingVertical: 12, borderRadius: 14,
+    backgroundColor: "#F5F5F5", borderWidth: 1.5, borderColor: "#E8E8E8",
+  },
+  budgetChipActive: { backgroundColor: "#FF4D00", borderColor: "#FF4D00" },
+  budgetChipText: { fontSize: 16, fontWeight: "700", color: "#333" },
+  budgetChipTextActive: { color: "#fff" },
+
+  // Alert input
+  alertInputRow: { flexDirection: "row", alignItems: "center", borderWidth: 1.5, borderColor: "#E8E8E8", borderRadius: 14, paddingHorizontal: 16, marginBottom: 4 },
+  alertDollar: { fontSize: 20, fontWeight: "700", color: "#FF4D00", marginRight: 4 },
+  alertInput: { flex: 1, fontSize: 20, paddingVertical: 14, color: "#111" },
+  alertSuccess: { backgroundColor: "#D4EDDA", borderRadius: 12, padding: 14, marginTop: 14 },
+  alertSuccessText: { color: "#155724", fontWeight: "600", textAlign: "center" },
 });
