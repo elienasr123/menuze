@@ -18,12 +18,18 @@ const POPULAR = [
 ];
 
 const CUISINES = [
-  { label: "🇱🇧 Lebanese", q: "Lebanese" },
-  { label: "🍔 American", q: "American" },
-  { label: "🇮🇹 Italian", q: "Italian" },
-  { label: "🇯🇵 Japanese", q: "Japanese" },
-  { label: "🇮🇳 Indian", q: "Indian" },
-  { label: "🇲🇽 Mexican", q: "Mexican" },
+  { label: "🇱🇧 Lebanese", q: "Lebanese", cuisine: "Lebanese" },
+  { label: "🍔 Burgers", q: "burger", cuisine: "Burgers" },
+  { label: "🍕 Pizza", q: "pizza", cuisine: "Pizza" },
+  { label: "🇮🇹 Italian", q: "pasta pizza", cuisine: "Italian" },
+  { label: "🍣 Sushi", q: "sushi", cuisine: "Sushi" },
+  { label: "🥗 Healthy", q: "healthy salad", cuisine: "Healthy" },
+  { label: "🌮 Mexican", q: "mexican tacos", cuisine: "Mexican" },
+  { label: "🍗 Chicken", q: "chicken", cuisine: "Chicken" },
+  { label: "🔥 Grills", q: "grill", cuisine: "Grills" },
+  { label: "🫐 Desserts", q: "dessert cake", cuisine: "Desserts" },
+  { label: "☕ Coffee", q: "coffee", cuisine: "Coffee" },
+  { label: "🐟 Seafood", q: "seafood fish", cuisine: "Seafood" },
 ];
 
 export default function HomeScreen() {
@@ -34,6 +40,32 @@ export default function HomeScreen() {
   const [userLat, setUserLat] = useState<number | undefined>();
   const [userLon, setUserLon] = useState<number | undefined>();
   const [selectedDish, setSelectedDish] = useState<Dish | null>(null);
+  const [showA2HS, setShowA2HS] = useState(false);
+  const [recentSearches, setRecentSearches] = useState<string[]>([]);
+
+  useEffect(() => {
+    if (typeof localStorage !== "undefined") {
+      const saved = localStorage.getItem("recent_searches");
+      if (saved) setRecentSearches(JSON.parse(saved));
+    }
+  }, []);
+
+  const saveRecent = (q: string) => {
+    if (!q.trim()) return;
+    const updated = [q, ...recentSearches.filter(r => r !== q)].slice(0, 5);
+    setRecentSearches(updated);
+    if (typeof localStorage !== "undefined") localStorage.setItem("recent_searches", JSON.stringify(updated));
+  };
+
+  useEffect(() => {
+    // Show "Add to Home Screen" banner on iOS Safari if not already installed
+    if (typeof window !== "undefined") {
+      const isIOS = /iphone|ipad|ipod/i.test(navigator.userAgent);
+      const isStandalone = (window.navigator as any).standalone === true;
+      const dismissed = localStorage.getItem("a2hs_dismissed");
+      if (isIOS && !isStandalone && !dismissed) setShowA2HS(true);
+    }
+  }, []);
 
   useEffect(() => {
     if (typeof navigator !== "undefined" && navigator.geolocation) {
@@ -48,6 +80,7 @@ export default function HomeScreen() {
     setQuery(q);
     setLoading(true);
     setSearched(true);
+    if (q.trim()) saveRecent(q.trim());
     try {
       const dishes = await searchDishes(q.trim(), userLat, userLon, cuisine);
       setResults(dishes);
@@ -56,7 +89,7 @@ export default function HomeScreen() {
     } finally {
       setLoading(false);
     }
-  }, [userLat, userLon]);
+  }, [userLat, userLon, recentSearches]);
 
   const handleSearch = useCallback(() => doSearch(query), [query, doSearch]);
 
@@ -82,6 +115,16 @@ export default function HomeScreen() {
         contentContainerStyle={{ flexGrow: 1 }}
         showsVerticalScrollIndicator={false}
       >
+        {/* Add to Home Screen banner */}
+        {showA2HS && (
+          <View style={styles.a2hsBanner}>
+            <Text style={styles.a2hsText}>📲 Add to Home Screen — tap <Text style={{fontWeight:"800"}}>Share</Text> then <Text style={{fontWeight:"800"}}>Add to Home Screen</Text></Text>
+            <TouchableOpacity onPress={() => { setShowA2HS(false); if (typeof localStorage !== "undefined") localStorage.setItem("a2hs_dismissed", "1"); }}>
+              <Text style={styles.a2hsClose}>✕</Text>
+            </TouchableOpacity>
+          </View>
+        )}
+
         {/* Header */}
         <View style={styles.header}>
           <Text style={styles.logo}>menuze</Text>
@@ -124,16 +167,39 @@ export default function HomeScreen() {
             <TouchableOpacity style={styles.backBtn} onPress={() => { setSearched(false); setQuery(""); setResults([]); }}>
               <Text style={styles.backBtnText}>← Back</Text>
             </TouchableOpacity>
-            <Text style={styles.sectionLabel}>{results.length} results for "{query}"</Text>
-            {results.map((item) => (
-              <DishCard key={item.id} dish={item} onPress={() => setSelectedDish(item)} />
-            ))}
+            <View style={styles.resultsHeader}>
+              <Text style={styles.resultsCount}>
+                <Text style={styles.resultsCountBold}>{results.length}</Text> results for "<Text style={styles.resultsCountBold}>{query}</Text>"
+              </Text>
+              {userLat ? <Text style={styles.resultsSorted}>📍 sorted by distance</Text> : null}
+            </View>
+            {(() => {
+              const withPrice = results.filter(d => d.price_usd > 0);
+              const minPrice = withPrice.length ? Math.min(...withPrice.map(d => d.price_usd)) : null;
+              const bestId = minPrice !== null ? withPrice.find(d => d.price_usd === minPrice)?.id : null;
+              return results.map((item) => (
+                <DishCard key={item.id} dish={item} onPress={() => setSelectedDish(item)} isBestPrice={item.id === bestId} />
+              ));
+            })()}
           </>
         )}
 
         {/* Empty state — show popular searches */}
         {!searched && (
           <>
+            {recentSearches.length > 0 && (
+              <>
+                <Text style={styles.sectionLabel}>Recent searches</Text>
+                <View style={styles.chipsWrap}>
+                  {recentSearches.map((r) => (
+                    <TouchableOpacity key={r} style={styles.chip} onPress={() => doSearch(r)}>
+                      <Text style={styles.chipText}>🕐 {r}</Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              </>
+            )}
+
             <Text style={styles.sectionLabel}>Popular searches</Text>
             <View style={styles.chipsWrap}>
               {POPULAR.map((p) => (
@@ -146,7 +212,7 @@ export default function HomeScreen() {
             <Text style={styles.sectionLabel}>Browse by cuisine</Text>
             <View style={styles.chipsWrap}>
               {CUISINES.map((c) => (
-                <TouchableOpacity key={c.q} style={styles.chipOutline} onPress={() => doSearch("", c.q)}>
+                <TouchableOpacity key={c.q} style={styles.chipOutline} onPress={() => doSearch(c.q, c.cuisine)}>
                   <Text style={styles.chipOutlineText}>{c.label}</Text>
                 </TouchableOpacity>
               ))}
@@ -218,13 +284,27 @@ export default function HomeScreen() {
   );
 }
 
-function DishCard({ dish, onPress }: { dish: Dish; onPress: () => void }) {
+function DishCard({ dish, onPress, isBestPrice }: { dish: Dish; onPress: () => void; isBestPrice?: boolean }) {
+  const shareOnWhatsApp = (e: any) => {
+    e.stopPropagation();
+    const price = dish.price_usd > 0 ? `$${dish.price_usd.toFixed(2)}` : `${Math.round(dish.price_lbp / 1000)}k LBP`;
+    const text = encodeURIComponent(`🍽 ${dish.dish_name} at ${dish.restaurant_name} for ${price}\nFind more deals on menuze 👉 https://elienasr123.github.io/menuze/`);
+    if (typeof window !== "undefined") window.location.href = `https://wa.me/?text=${text}`;
+  };
+
   return (
-    <TouchableOpacity style={styles.card} onPress={onPress} activeOpacity={0.85}>
+    <TouchableOpacity style={[styles.card, isBestPrice && styles.cardBest]} onPress={onPress} activeOpacity={0.85}>
+      {isBestPrice && (
+        <View style={styles.bestBadge}>
+          <Text style={styles.bestBadgeText}>💰 Best Price</Text>
+        </View>
+      )}
       {dish.image_url ? (
         <Image source={{ uri: dish.image_url }} style={styles.dishImage} />
       ) : (
-        <View style={[styles.dishImage, styles.imagePlaceholder]} />
+        <View style={[styles.dishImage, styles.imagePlaceholder]}>
+          <Text style={{ fontSize: 28 }}>🍽</Text>
+        </View>
       )}
       <View style={styles.cardBody}>
         <Text style={styles.dishName} numberOfLines={1}>{dish.dish_name}</Text>
@@ -235,7 +315,7 @@ function DishCard({ dish, onPress }: { dish: Dish; onPress: () => void }) {
           <Text style={styles.restaurantName} numberOfLines={1}>{dish.restaurant_name}</Text>
         </View>
         {dish.description ? (
-          <Text style={styles.description} numberOfLines={2}>{dish.description}</Text>
+          <Text style={styles.description} numberOfLines={1}>{dish.description}</Text>
         ) : null}
         {dish.distance_km != null && (
           <Text style={styles.distance}>📍 {dish.distance_km} km</Text>
@@ -248,6 +328,9 @@ function DishCard({ dish, onPress }: { dish: Dish; onPress: () => void }) {
         {dish.price_lbp > 0 && (
           <Text style={styles.priceLbp}>{Math.round(dish.price_lbp / 1000)}k LBP</Text>
         )}
+        <TouchableOpacity onPress={shareOnWhatsApp} style={styles.shareBtn}>
+          <Text style={styles.shareBtnText}>↗</Text>
+        </TouchableOpacity>
       </View>
     </TouchableOpacity>
   );
@@ -308,8 +391,19 @@ const styles = StyleSheet.create({
   bannerSub: { fontSize: 13, color: "rgba(255,255,255,0.85)", lineHeight: 18 },
 
   // Back button
-  backBtn: { paddingHorizontal: 16, paddingVertical: 8, marginBottom: 4 },
+  backBtn: { paddingHorizontal: 16, paddingVertical: 8, marginBottom: 0 },
   backBtnText: { fontSize: 15, color: "#FF4D00", fontWeight: "700" },
+
+  // A2HS banner
+  a2hsBanner: { backgroundColor: "#FFF5F2", borderBottomWidth: 1, borderBottomColor: "#FFD4C2", flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: 16, paddingVertical: 10 },
+  a2hsText: { fontSize: 12, color: "#FF4D00", flex: 1, lineHeight: 17 },
+  a2hsClose: { fontSize: 16, color: "#FF4D00", paddingLeft: 12 },
+
+  // Results header
+  resultsHeader: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: 16, paddingVertical: 10 },
+  resultsCount: { fontSize: 13, color: "#888" },
+  resultsCountBold: { fontWeight: "700", color: "#111" },
+  resultsSorted: { fontSize: 11, color: "#FF4D00", fontWeight: "600" },
 
   // Results
   empty: { textAlign: "center", color: "#aaa", marginTop: 60, fontSize: 15 },
@@ -322,8 +416,18 @@ const styles = StyleSheet.create({
     shadowColor: "#000", shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.07, shadowRadius: 8, elevation: 3,
   },
+  cardBest: {
+    borderWidth: 1.5, borderColor: "#FF4D00",
+    shadowColor: "#FF4D00", shadowOpacity: 0.15, shadowRadius: 10,
+  },
+  bestBadge: {
+    position: "absolute", top: 8, left: 8, zIndex: 10,
+    backgroundColor: "#FF4D00", borderRadius: 8,
+    paddingHorizontal: 7, paddingVertical: 3,
+  },
+  bestBadgeText: { color: "#fff", fontSize: 10, fontWeight: "800" },
   dishImage: { width: 90, height: 90 },
-  imagePlaceholder: { backgroundColor: "#F0F0F0" },
+  imagePlaceholder: { backgroundColor: "#F5F5F5", width: 90, height: 90, alignItems: "center", justifyContent: "center" },
   cardBody: { flex: 1, padding: 10, justifyContent: "center" },
   dishName: { fontSize: 14, fontWeight: "700", color: "#111", marginBottom: 3 },
   restaurantRow: { flexDirection: "row", alignItems: "center", gap: 5, marginBottom: 3 },
@@ -334,6 +438,8 @@ const styles = StyleSheet.create({
   priceBox: { justifyContent: "center", alignItems: "flex-end", paddingHorizontal: 10, minWidth: 70 },
   price: { fontSize: 15, fontWeight: "800", color: "#FF4D00" },
   priceLbp: { fontSize: 10, color: "#AAA", marginTop: 2 },
+  shareBtn: { marginTop: 8, backgroundColor: "#F0F0F0", borderRadius: 8, width: 28, height: 28, alignItems: "center", justifyContent: "center" },
+  shareBtnText: { fontSize: 14, color: "#555", fontWeight: "700" },
 
   // Modal
   modalOverlay: { flex: 1, backgroundColor: "rgba(0,0,0,0.5)", justifyContent: "flex-end" },
