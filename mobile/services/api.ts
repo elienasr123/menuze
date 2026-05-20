@@ -81,3 +81,52 @@ export async function getTrending(): Promise<{ up: TrendingDish[]; down: Trendin
   const { data } = await api.get("/trending");
   return data;
 }
+
+// ── Retail ────────────────────────────────────────────────────────────────────
+
+export interface RetailProduct {
+  id: string;
+  name: string;
+  brand: string;
+  sku: string;
+  price_usd: number;
+  image_url: string;
+  category: string;
+  subcategory: string;
+  platform: string;
+  store_name: string;
+}
+
+export interface BasketItem {
+  searched: string;
+  found: string | null;
+  brand: string | null;
+  platform: string | null;
+  price_usd: number | null;
+  image_url: string | null;
+}
+
+export interface PlatformResult {
+  total: number;
+  coverage: number;
+  found: { searched: string; found: string; brand: string; price_usd: number; image_url: string }[];
+  missing: string[];
+}
+
+export interface BasketComparison {
+  items_searched: string[];
+  by_platform: Record<string, PlatformResult>;
+  best_mix: { total: number; items: BasketItem[] };
+}
+
+export async function searchRetailProducts(query: string, platform?: string): Promise<RetailProduct[]> {
+  const params: Record<string, string> = { q: query };
+  if (platform) params.platform = platform;
+  const { data } = await api.get("/retail/search", { params });
+  return data.results;
+}
+
+export async function compareBasket(items: string[]): Promise<BasketComparison> {
+  const { data } = await api.get("/retail/basket", { params: { items: items.join(",") } });
+  return data;
+}

@@ -6,7 +6,7 @@ from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 from sqlalchemy import text
 from app.limiter import limiter
-from app.routers import search, restaurants, snapshots
+from app.routers import search, restaurants, snapshots, retail
 from app.database import engine
 
 # ── Auto-migration ────────────────────────────────────────────────────────────
@@ -30,6 +30,34 @@ def run_migrations():
         conn.execute(text("ALTER TABLE dishes ADD COLUMN IF NOT EXISTS price_updated_at TIMESTAMP WITH TIME ZONE DEFAULT NULL"))
         conn.execute(text("ALTER TABLE restaurants ADD COLUMN IF NOT EXISTS lat DOUBLE PRECISION"))
         conn.execute(text("ALTER TABLE restaurants ADD COLUMN IF NOT EXISTS lon DOUBLE PRECISION"))
+        conn.execute(text("""
+            CREATE TABLE IF NOT EXISTS retail_products (
+                id TEXT PRIMARY KEY,
+                name TEXT NOT NULL,
+                brand TEXT,
+                sku TEXT,
+                price_usd DECIMAL(10,2) DEFAULT 0,
+                image_url TEXT,
+                category TEXT,
+                subcategory TEXT,
+                platform TEXT NOT NULL,
+                store_name TEXT,
+                search_vector tsvector GENERATED ALWAYS AS (
+                    to_tsvector('simple', coalesce(name, '') || ' ' || coalesce(brand, ''))
+                ) STORED
+            )
+        """))
+        conn.execute(text("""
+            CREATE INDEX IF NOT EXISTS idx_retail_search
+            ON retail_products USING GIN(search_vector)
+        """))
+        conn.execute(text("""
+            CREATE INDEX IF NOT EXISTS idx_retail_sku ON retail_products(sku)
+            WHERE sku IS NOT NULL AND sku != ''
+        """))
+        conn.execute(text("""
+            CREATE INDEX IF NOT EXISTS idx_retail_platform ON retail_products(platform)
+        """))
         conn.commit()
 
 run_migrations()
@@ -74,6 +102,7 @@ async def verify_api_key(request: Request, call_next):
 app.include_router(search.router)
 app.include_router(restaurants.router)
 app.include_router(snapshots.router)
+app.include_router(retail.router)
 
 @app.get("/health")
 def health():
