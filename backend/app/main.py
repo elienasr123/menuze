@@ -28,6 +28,8 @@ def run_migrations():
         conn.execute(text("ALTER TABLE dishes ADD COLUMN IF NOT EXISTS prev_price_usd DECIMAL(10,2) DEFAULT NULL"))
         conn.execute(text("ALTER TABLE dishes ADD COLUMN IF NOT EXISTS prev_price_lbp DECIMAL(12,0) DEFAULT NULL"))
         conn.execute(text("ALTER TABLE dishes ADD COLUMN IF NOT EXISTS price_updated_at TIMESTAMP WITH TIME ZONE DEFAULT NULL"))
+        conn.execute(text("ALTER TABLE restaurants ADD COLUMN IF NOT EXISTS lat DOUBLE PRECISION"))
+        conn.execute(text("ALTER TABLE restaurants ADD COLUMN IF NOT EXISTS lon DOUBLE PRECISION"))
         conn.commit()
 
 run_migrations()
