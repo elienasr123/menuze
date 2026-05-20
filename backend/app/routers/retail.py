@@ -15,8 +15,14 @@ def search_products(
     category: Optional[str] = None,
     db: Session = Depends(get_db),
 ):
-    """Search retail products across all platforms."""
-    params: dict = {"q": q.strip(), "like_q": f"%{q.strip()}%", "limit": 50}
+    """Search retail products across all platforms, balanced per platform."""
+    q_clean = q.strip().lower()
+    params: dict = {
+        "q": q_clean,
+        "like_q": f"%{q_clean}%",
+        "starts_q": f"{q_clean}%",
+        "per_platform": 25,
+    }
 
     platform_filter = ""
     if platform:
@@ -29,19 +35,35 @@ def search_products(
         params["category"] = f"%{category}%"
 
     rows = db.execute(text(f"""
-        SELECT id, name, brand, sku, price_usd, image_url,
-               category, subcategory, platform, store_name,
-               ts_rank(search_vector, plainto_tsquery('simple', :q)) AS rank
-        FROM retail_products
-        WHERE (
-            search_vector @@ plainto_tsquery('simple', :q)
-            OR name ILIKE :like_q
+        WITH ranked AS (
+            SELECT id, name, brand, sku, price_usd, image_url,
+                   category, subcategory, platform, store_name,
+                   CASE
+                       WHEN lower(name) = :q                        THEN 5.0
+                       WHEN lower(name) LIKE :starts_q              THEN 4.0
+                       WHEN lower(name) LIKE '% ' || :q || ' %'     THEN 3.0
+                       WHEN lower(name) LIKE '% ' || :q             THEN 2.5
+                       ELSE ts_rank(search_vector, plainto_tsquery('simple', :q))
+                   END AS rank
+            FROM retail_products
+            WHERE (
+                search_vector @@ plainto_tsquery('simple', :q)
+                OR lower(name) LIKE :like_q
+            )
+            AND price_usd > 0
+            {platform_filter}
+            {category_filter}
+        ),
+        per_platform AS (
+            SELECT *,
+                   ROW_NUMBER() OVER (PARTITION BY platform ORDER BY rank DESC, price_usd ASC) AS rn
+            FROM ranked
         )
-        AND price_usd > 0
-        {platform_filter}
-        {category_filter}
+        SELECT id, name, brand, sku, price_usd, image_url,
+               category, subcategory, platform, store_name, rank
+        FROM per_platform
+        WHERE rn <= :per_platform
         ORDER BY rank DESC, price_usd ASC
-        LIMIT :limit
     """), params).mappings().all()
 
     return {"results": [dict(r) for r in rows]}
@@ -64,18 +86,26 @@ def compare_basket(
     basket = {}  # item_name -> {platform -> best_match}
 
     for item_name in item_names:
+        q_item = item_name.lower()
         params = {
-            "q": item_name,
-            "like_q": f"%{item_name}%",
+            "q": q_item,
+            "like_q": f"%{q_item}%",
+            "starts_q": f"{q_item}%",
         }
         rows = db.execute(text("""
             SELECT id, name, brand, price_usd, image_url,
                    category, platform, store_name,
-                   ts_rank(search_vector, plainto_tsquery('simple', :q)) AS rank
+                   CASE
+                       WHEN lower(name) = :q                     THEN 5.0
+                       WHEN lower(name) LIKE :starts_q           THEN 4.0
+                       WHEN lower(name) LIKE '% ' || :q || ' %'  THEN 3.0
+                       WHEN lower(name) LIKE '% ' || :q          THEN 2.5
+                       ELSE ts_rank(search_vector, plainto_tsquery('simple', :q))
+                   END AS rank
             FROM retail_products
             WHERE (
                 search_vector @@ plainto_tsquery('simple', :q)
-                OR name ILIKE :like_q
+                OR lower(name) LIKE :like_q
             )
             AND price_usd > 0
             ORDER BY rank DESC, price_usd ASC
