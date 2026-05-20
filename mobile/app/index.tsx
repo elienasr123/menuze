@@ -5,6 +5,7 @@ import {
   Modal, ScrollView, Platform, Linking,
 } from "react-native";
 import { searchDishes, searchRestaurants, getTrending, Dish, Restaurant, TrendingDish } from "../services/api";
+import RetailScreen from "./retail";
 
 const POPULAR = [
   { label: "🥙 Shawarma", q: "shawarma" },
@@ -33,6 +34,7 @@ const CUISINES = [
 ];
 
 export default function HomeScreen() {
+  const [mainTab, setMainTab] = useState<"restaurants" | "retail">("restaurants");
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<Dish[]>([]);
   const [loading, setLoading] = useState(false);
@@ -255,8 +257,34 @@ export default function HomeScreen() {
     openUrl(`https://www.google.com/search?q=${encodeURIComponent(dish.restaurant_name + " Lebanon")}`);
   };
 
+  if (mainTab === "retail") {
+    return (
+      <SafeAreaView style={styles.container}>
+        {/* Main tab bar */}
+        <View style={mainTabStyles.bar}>
+          <TouchableOpacity style={mainTabStyles.tab} onPress={() => setMainTab("restaurants")}>
+            <Text style={mainTabStyles.tabText}>🍽 Restaurants</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={[mainTabStyles.tab, mainTabStyles.tabActive]}>
+            <Text style={[mainTabStyles.tabText, mainTabStyles.tabTextActive]}>🛒 Retail</Text>
+          </TouchableOpacity>
+        </View>
+        <RetailScreen />
+      </SafeAreaView>
+    );
+  }
+
   return (
     <SafeAreaView style={styles.container}>
+      {/* Main tab bar */}
+      <View style={mainTabStyles.bar}>
+        <TouchableOpacity style={[mainTabStyles.tab, mainTabStyles.tabActive]}>
+          <Text style={[mainTabStyles.tabText, mainTabStyles.tabTextActive]}>🍽 Restaurants</Text>
+        </TouchableOpacity>
+        <TouchableOpacity style={mainTabStyles.tab} onPress={() => setMainTab("retail")}>
+          <Text style={mainTabStyles.tabText}>🛒 Retail</Text>
+        </TouchableOpacity>
+      </View>
       <ScrollView
         keyboardShouldPersistTaps="handled"
         contentContainerStyle={{ flexGrow: 1 }}
@@ -1186,4 +1214,15 @@ const styles = StyleSheet.create({
   trendPriceCurrent: { fontSize: 14, fontWeight: "800", color: "#111" },
   trendBadgeDown: { fontSize: 11, fontWeight: "700", color: "#22C55E", backgroundColor: "#F0FFF4", paddingHorizontal: 6, paddingVertical: 2, borderRadius: 6 },
   trendBadgeUp: { fontSize: 11, fontWeight: "700", color: "#E53E3E", backgroundColor: "#FFF5F5", paddingHorizontal: 6, paddingVertical: 2, borderRadius: 6 },
+});
+
+const mainTabStyles = StyleSheet.create({
+  bar: {
+    flexDirection: "row", backgroundColor: "#111",
+    borderBottomWidth: 1, borderBottomColor: "#222",
+  },
+  tab: { flex: 1, paddingVertical: 13, alignItems: "center" },
+  tabActive: { borderBottomWidth: 2, borderBottomColor: "#1DB954" },
+  tabText: { color: "#888", fontSize: 14, fontWeight: "600" },
+  tabTextActive: { color: "#1DB954" },
 });
