@@ -129,7 +129,12 @@ export default function RetailScreen() {
 
           {/* Quick categories */}
           {!searched && (
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.quickCats}>
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              style={styles.quickCats}
+              contentContainerStyle={styles.quickCatsContent}
+            >
               {QUICK_CATEGORIES.map(c => (
                 <TouchableOpacity
                   key={c.q}
@@ -317,7 +322,8 @@ const styles = StyleSheet.create({
   },
   searchBtn: { backgroundColor: "#1DB954", borderRadius: 10, paddingHorizontal: 16, justifyContent: "center" },
   searchBtnText: { color: "#fff", fontWeight: "700" },
-  quickCats: { paddingHorizontal: 12, marginBottom: 8 },
+  quickCats: { paddingHorizontal: 12, marginBottom: 8, flexGrow: 0 },
+  quickCatsContent: { flexDirection: "row", alignItems: "center", paddingRight: 12 },
   catChip: { backgroundColor: "#1a1a1a", borderRadius: 20, paddingHorizontal: 14, paddingVertical: 8, marginRight: 8, borderWidth: 1, borderColor: "#333" },
   catChipText: { color: "#ddd", fontSize: 13 },
   emptyText: { color: "#666", textAlign: "center", marginTop: 40, fontSize: 16 },
