@@ -16,14 +16,14 @@ const PLATFORM_LABELS: Record<string, string> = {
 };
 
 const QUICK_CATEGORIES = [
-  { label: "🥛 Dairy", q: "milk cheese yogurt" },
-  { label: "🧴 Shampoo", q: "shampoo hair" },
-  { label: "🍪 Snacks", q: "chips snacks" },
-  { label: "🧹 Cleaning", q: "cleaning detergent" },
-  { label: "👶 Baby", q: "diapers baby" },
-  { label: "🐾 Pet", q: "pet food cat dog" },
-  { label: "💊 Health", q: "vitamins supplements" },
-  { label: "☕ Coffee", q: "coffee tea" },
+  { label: "🥛 Dairy",    q: "milk",      category: "Dairy" },
+  { label: "🧴 Shampoo",  q: "shampoo",   category: "Hair Care" },
+  { label: "🍪 Snacks",   q: "snacks",    category: "Snacks" },
+  { label: "🧹 Cleaning", q: "cleaning",  category: "Home Care" },
+  { label: "👶 Baby",     q: "baby",      category: "Child Care" },
+  { label: "🐾 Pet",      q: "pet",       category: "Pet Care" },
+  { label: "💊 Health",   q: "vitamins",  category: "Wellness" },
+  { label: "☕ Coffee",   q: "coffee",    category: "Coffee" },
 ];
 
 export default function RetailScreen() {
@@ -42,12 +42,12 @@ export default function RetailScreen() {
   const [comparison, setComparison] = useState<BasketComparison | null>(null);
   const [bestMixExpanded, setBestMixExpanded] = useState(false);
 
-  const handleSearch = useCallback(async (q: string) => {
+  const handleSearch = useCallback(async (q: string, category?: string) => {
     if (!q.trim()) return;
     setSearching(true);
     setSearched(true);
     try {
-      const results = await searchRetailProducts(q.trim());
+      const results = await searchRetailProducts(q.trim(), undefined, category);
       setSearchResults(results);
     } catch (e) {
       setSearchResults([]);
@@ -139,7 +139,7 @@ export default function RetailScreen() {
                 <TouchableOpacity
                   key={c.q}
                   style={styles.catChip}
-                  onPress={() => { setQuery(c.q); handleSearch(c.q); }}
+                  onPress={() => { setQuery(c.q); handleSearch(c.q, c.category); }}
                 >
                   <Text style={styles.catChipText}>{c.label}</Text>
                 </TouchableOpacity>

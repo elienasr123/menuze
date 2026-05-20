@@ -119,9 +119,10 @@ export interface BasketComparison {
   best_mix: { total: number; items: BasketItem[] };
 }
 
-export async function searchRetailProducts(query: string, platform?: string): Promise<RetailProduct[]> {
+export async function searchRetailProducts(query: string, platform?: string, category?: string): Promise<RetailProduct[]> {
   const params: Record<string, string> = { q: query };
   if (platform) params.platform = platform;
+  if (category) params.category = category;
   const { data } = await api.get("/retail/search", { params });
   return data.results;
 }
