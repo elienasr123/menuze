@@ -260,16 +260,7 @@ export default function HomeScreen() {
   if (mainTab === "retail") {
     return (
       <SafeAreaView style={styles.container}>
-        {/* Main tab bar */}
-        <View style={mainTabStyles.bar}>
-          <TouchableOpacity style={mainTabStyles.tab} onPress={() => setMainTab("restaurants")}>
-            <Text style={mainTabStyles.tabText}>🍽 Restaurants</Text>
-          </TouchableOpacity>
-          <TouchableOpacity style={[mainTabStyles.tab, mainTabStyles.tabActive]}>
-            <Text style={[mainTabStyles.tabText, mainTabStyles.tabTextActive]}>🛒 Retail</Text>
-          </TouchableOpacity>
-        </View>
-        <RetailScreen />
+        <RetailScreen onBack={() => setMainTab("restaurants")} />
       </SafeAreaView>
     );
   }

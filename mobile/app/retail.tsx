@@ -26,7 +26,7 @@ const QUICK_CATEGORIES = [
   { label: "☕ Coffee",   q: "coffee",    category: "Coffee" },
 ];
 
-export default function RetailScreen() {
+export default function RetailScreen({ onBack }: { onBack?: () => void }) {
   const [tab, setTab] = useState<"search" | "basket">("search");
 
   // Search state
@@ -89,22 +89,29 @@ export default function RetailScreen() {
 
   return (
     <View style={styles.container}>
-      {/* Tab switcher */}
-      <View style={styles.tabBar}>
-        <TouchableOpacity
-          style={[styles.tab, tab === "search" && styles.tabActive]}
-          onPress={() => setTab("search")}
-        >
-          <Text style={[styles.tabText, tab === "search" && styles.tabTextActive]}>🔍 Search</Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={[styles.tab, tab === "basket" && styles.tabActive]}
-          onPress={() => setTab("basket")}
-        >
-          <Text style={[styles.tabText, tab === "basket" && styles.tabTextActive]}>
-            🛒 Basket {basketItems.length > 0 ? `(${basketItems.length})` : ""}
-          </Text>
-        </TouchableOpacity>
+      {/* Header row: back button + inner tabs */}
+      <View style={styles.headerRow}>
+        {onBack ? (
+          <TouchableOpacity style={styles.backBtn} onPress={onBack}>
+            <Text style={styles.backBtnText}>‹ Restaurants</Text>
+          </TouchableOpacity>
+        ) : <View style={styles.backBtn} />}
+        <View style={styles.tabBar}>
+          <TouchableOpacity
+            style={[styles.tab, tab === "search" && styles.tabActive]}
+            onPress={() => setTab("search")}
+          >
+            <Text style={[styles.tabText, tab === "search" && styles.tabTextActive]}>🔍 Search</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.tab, tab === "basket" && styles.tabActive]}
+            onPress={() => setTab("basket")}
+          >
+            <Text style={[styles.tabText, tab === "basket" && styles.tabTextActive]}>
+              🛒 Basket {basketItems.length > 0 ? `(${basketItems.length})` : ""}
+            </Text>
+          </TouchableOpacity>
+        </View>
       </View>
 
       {tab === "search" ? (
@@ -310,7 +317,13 @@ export default function RetailScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: "#0a0a0a" },
-  tabBar: { flexDirection: "row", backgroundColor: "#111", borderBottomWidth: 1, borderBottomColor: "#222" },
+  headerRow: {
+    flexDirection: "row", alignItems: "center",
+    backgroundColor: "#111", borderBottomWidth: 1, borderBottomColor: "#222",
+  },
+  backBtn: { paddingHorizontal: 12, paddingVertical: 12, minWidth: 100 },
+  backBtnText: { color: "#1DB954", fontSize: 13, fontWeight: "600" },
+  tabBar: { flex: 1, flexDirection: "row" },
   tab: { flex: 1, paddingVertical: 12, alignItems: "center" },
   tabActive: { borderBottomWidth: 2, borderBottomColor: "#1DB954" },
   tabText: { color: "#888", fontSize: 14, fontWeight: "500" },
