@@ -56,14 +56,14 @@ def search_products(
         ),
         per_platform AS (
             SELECT *,
-                   ROW_NUMBER() OVER (PARTITION BY platform ORDER BY rank DESC, price_usd ASC) AS rn
+                   ROW_NUMBER() OVER (PARTITION BY platform ORDER BY rank DESC, length(name) ASC, price_usd ASC) AS rn
             FROM ranked
         )
         SELECT id, name, brand, sku, price_usd, image_url,
                category, subcategory, platform, store_name, rank
         FROM per_platform
         WHERE rn <= :per_platform
-        ORDER BY rank DESC, price_usd ASC
+        ORDER BY rank DESC, length(name) ASC, price_usd ASC
     """), params).mappings().all()
 
     return {"results": [dict(r) for r in rows]}
@@ -108,7 +108,7 @@ def compare_basket(
                 OR lower(name) LIKE :like_q
             )
             AND price_usd > 0
-            ORDER BY rank DESC, price_usd ASC
+            ORDER BY rank DESC, length(name) ASC, price_usd ASC
             LIMIT 20
         """), params).mappings().all()
 
